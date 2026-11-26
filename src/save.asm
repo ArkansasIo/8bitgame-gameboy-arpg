@@ -40,9 +40,20 @@ SramOff:
     ld [rRAMG], a
     ret
 
+DEF NUM_SLOTS EQU 5
+
+SlotBase:                        ; hl = de = $A000 + slot * $100
+    ld a, [wSlot]
+    add a, HIGH(SRAM_BASE)
+    ld h, a
+    ld d, a
+    ld l, 0
+    ld e, 0
+    ret
+
 SaveGame:
     call SramOn
-    ld de, SRAM_BASE
+    call SlotBase
     ld a, "D"
     ld [de], a
     inc de
@@ -86,7 +97,31 @@ SaveGame:
     jp SramOff
 
 ; carry clear + data restored if a valid save exists. hl = SaveMap walk
-HasSave:                         ; nz if a valid save exists
+HasSave:                         ; nz if any slot holds a valid save
+    ld a, [wSlot]
+    push af
+    ld c, NUM_SLOTS
+.l:
+    ld a, c
+    dec a
+    ld [wSlot], a
+    push bc
+    call SlotValid
+    pop bc
+    jr nz, .yes
+    dec c
+    jr nz, .l
+    pop af
+    ld [wSlot], a
+    xor a
+    ret
+.yes:
+    pop af
+    ld [wSlot], a
+    or 1
+    ret
+
+SlotValid:                       ; nz if slot wSlot is valid
     call SramOn
     call CheckSave
     push af
@@ -95,7 +130,7 @@ HasSave:                         ; nz if a valid save exists
     ret
 
 CheckSave:                       ; (SRAM on) -> nz if valid
-    ld hl, SRAM_BASE
+    call SlotBase
     ld a, [hl+]
     cp "D"
     jr nz, .bad
@@ -139,7 +174,10 @@ CheckSave:                       ; (SRAM on) -> nz if valid
 
 LoadGame:                        ; restore every block from SRAM
     call SramOn
-    ld de, SRAM_BASE + 3
+    call SlotBase
+    inc e
+    inc e
+    inc e
     ld hl, SaveMap
 .block:
     ld a, [hl+]
@@ -204,55 +242,147 @@ ContinueGame:
     ld [wHudOn], a
     jp LoadRoom
 
-; ---- pause menu: SAVE -------------------------------------------------------
-OpenSaveAsk:
+; ---- save / load slot screen ------------------------------------------------
+OpenSaveAsk:                     ; pause menu SAVE
+    xor a
+OpenSlots:                       ; a = mode (0 save, 1 load)
+    ld [wSlotMode], a
     ld a, M_SAVEASK
     ld [wMenu], a
-    xor a
-    ld [wSubCur], a
+    call DrawSlots
+    ld a, 7
+    ld b, 0
+    ld c, 144
+    call SetWindow
+    call ShowFresh
+    jp ClearOAM
+
+DrawSlots:
     call WinClearAll
     ld b, 0
     ld c, 0
     ld d, 20
-    ld e, 6
+    ld e, 18
     call DrawBox
-    ld hl, StrSaveAsk
-    ld b, 1
-    ld c, 2
+    ld a, [wSlotMode]
+    and a
+    ld hl, StrSaveTitle
+    jr z, .t
+    ld hl, StrLoadTitle
+.t:
+    ld b, 2
+    ld c, 1
     call WinPrint
-    ld hl, StrYesNo
-    ld b, 3
-    ld c, 4
+    ld a, [wSlot]
+    push af
+    xor a
+.slot:
+    ld [wSlot], a
+    add a, a
+    add a, 3
+    ld c, a
+    ld b, 2
+    ld a, [wSlot]
+    add a, T_DIGIT0 + 1
+    call WinPutTile
+    push bc
+    call SlotValid
+    pop bc
+    ld hl, StrEmptySlot
+    jr z, .empty
+    call SramOn                  ; class + level from the slot
+    call SlotBase
+    ld a, l
+    add a, 3 + 26
+    ld l, a
+    ld a, [hl]
+    ld [wTmp], a
+    call SlotBase
+    inc l
+    inc l
+    inc l
+    ld a, [hl+]
+    ld [wTmpW], a
+    ld a, [hl]
+    ld [wTmpW + 1], a
+    call SramOff
+    push bc
+    ld a, [wTmp]
+    and 3
+    add a, a
+    ld e, a
+    ld d, 0
+    ld hl, ClassNames
+    add hl, de
+    call LoadW
+    ld b, 4
     call WinPrint
-    call InnCursor
-    ld a, 7
-    ld b, 96
-    ld c, 144
-    call SetWindow
-    call ShowFresh
-    jp ReshowSprites
+    pop bc
+    push bc
+    ld hl, StrLV
+    ld b, 12
+    call WinPrint
+    pop bc
+    ld hl, wTmpW
+    ld b, 14
+    call PutWord
+    jr .next
+.empty:
+    ld b, 4
+    call WinPrint
+.next:
+    ld a, [wSlot]
+    inc a
+    cp NUM_SLOTS
+    jr c, .slot
+    pop af
+    ld [wSlot], a
+    ld hl, StrSlotHint
+    ld b, 2
+    ld c, 15
+    call WinPrint
+    jp SlotCursor
 
-MenuSaveAsk:
-    ldh a, [hNewKeys]
-    and $F0
-    jr z, .noMove
-    ld a, [wSubCur]
-    xor 1
-    ld [wSubCur], a
-    call SfxMenu
-    jp InnCursor
-.noMove:
+SlotCursor:
+    ld b, 1
+    ld c, 3
+    ld d, NUM_SLOTS
+    ld a, [wSlotCur]
+    ld e, a
+    ld a, T_CUR
+    jp DrawListCursor
+
+; shared input: a = 0 nothing, 1 chose a slot (wSlotCur), 2 back
+SlotsInput:
+    ld hl, wSlotCur
+    ld b, NUM_SLOTS
+    call ListNav
+    jr nc, .nm
+    call SlotCursor
+    xor a
+    ret
+.nm:
     ldh a, [hNewKeys]
     and PAD_B
-    jr nz, .back
+    ld a, 2
+    ret nz
     ldh a, [hNewKeys]
     and PAD_A
-    ret z
-    ld a, [wSubCur]
+    ret z                        ; a = 0
+    ld a, 1
+    ret
+
+MenuSaveAsk:                     ; pause-menu slot screen (save mode)
+    call SlotsInput
     and a
-    jr nz, .back
+    ret z
+    cp 2
+    jr z, .back
+    ld a, [wSlotCur]
+    ld [wSlot], a
     call SaveGame
     call SfxWin
+    call DrawSlots
     ld hl, DlgSaved
     ld de, 0
     jp OpenDialog
@@ -260,9 +390,92 @@ MenuSaveAsk:
     call SfxMenu
     jp ReturnToPause
 
+; title screen: pick a slot to load. -> carry set if a game was loaded
+TitleLoad:
+    call ClearOAM
+    ld a, 1
+    ld [wSlotMode], a
+    call DrawSlots
+    ld a, 7
+    ld b, 0
+    ld c, 144
+    call SetWindow
+    call ShowFresh
+.loop:
+    call WaitVBlank
+    call ReadJoypad
+    call SlotsInput
+    and a
+    jr z, .loop
+    cp 2
+    jr z, .back
+    ld a, [wSlotCur]
+    ld [wSlot], a
+    call SlotValid
+    jr nz, .go
+    call SfxBlock
+    jr .loop
+.go:
+    call SfxPickup
+    call ShowLoading
+    call ContinueGame
+    scf
+    ret
+.back:
+    call SfxMenu
+    or a
+    ret
+
+; ---- loading screen ---------------------------------------------------------
+ShowLoading:
+    call WinClearAll
+    ld b, 0
+    ld c, 0
+    ld d, 20
+    ld e, 18
+    call DrawBox
+    ld hl, StrLoading
+    ld b, 4
+    ld c, 8
+    call WinPrint
+    ld a, 7
+    ld b, 0
+    ld c, 144
+    call SetWindow
+    call ShowFresh
+    call ClearOAM
+    ld a, 0
+    ld [wTmp], a
+.dots:
+    ld b, 8
+.w:
+    push bc
+    call WaitVBlank
+    pop bc
+    dec b
+    jr nz, .w
+    ld a, [wTmp]
+    add a, 16
+    ld b, a
+    ld c, 8
+    ld a, "."
+    call WinPutTile
+    ld hl, wTmp
+    inc [hl]
+    ld a, [hl]
+    cp 3
+    jr c, .dots
+    xor a
+    ld [wWinOn], a
+    ret
+
+StrSaveTitle: db "SAVE GAME", $FF
+StrLoadTitle: db "LOAD GAME", $FF
+StrEmptySlot: db "- EMPTY -", $FF
+StrSlotHint:  db "A: OK   B: BACK", $FF
+StrLoading:   db "NOW LOADING", $FF
 DlgSaved:
     dw .a, .b
     dw 0
 .a: db "YOUR JOURNEY HAS", $FF
 .b: db "BEEN SAVED.", $FF
-StrSaveAsk: db "SAVE YOUR GAME?", $FF

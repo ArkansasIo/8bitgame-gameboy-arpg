@@ -1,6 +1,6 @@
 # ARPG GB QUEST: an action RPG for Game Boy Color
 
-**Version 0.4.0, build 20261126**
+**Version 0.4.1, build 20261126**
 
 A top-down action RPG written in SM83 assembly. It runs on a Game Boy Color, GBA or GBA SP
 in full color, and on an original Game Boy in grayscale. The game uses a 64 KB MBC5
@@ -37,7 +37,8 @@ in Whisperwood, the Sunscar Dunes, Frostfang Reach and Mirefen Marsh, then end t
 | Inventory | 10-slot bag; potions stack; equip or toss; stats recalculated on equip | `src/inventory.asm` |
 | Town | Talk to NPCs, dialogue boxes, a merchant to buy and sell, an inn to rest (long rest) | `src/town.asm` |
 | Quests | Main quest plus 3 side quests with kill counters, turn-ins, gold and item rewards, and a quest log | `src/quests.asm` |
-| Save | Battery save slot with a checksum; Continue from the title screen | `src/save.asm` |
+| Save | 5 battery save slots with checksums, save/load slot screens, loading screen | `src/save.asm` |
+| Boot | Developer logo screen (crest + ARKANSASIO) with fade, then the title with version and build | `game.asm` |
 | Menus | STATUS, ITEMS, SKILLS, QUESTS, MAP, BESTIARY (14 monsters), SAVE, OPTIONS (palette, sound) | `game.asm` |
 
 ## Build

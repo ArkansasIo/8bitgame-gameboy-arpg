@@ -1,5 +1,5 @@
 ; ============================================================================
-;  ARPG GB QUEST v0.4.0 (build 20261126) - action RPG for Game Boy Color
+;  ARPG GB QUEST v0.4.1 (build 20261126) - action RPG for Game Boy Color
 ;  Assembler: RGBDS 0.9+   (rgbasm / rgblink / rgbfix)
 ;
 ;  * GBC-enhanced: full color on Game Boy Color / GBA / GBA SP,
@@ -350,6 +350,8 @@ Main:
     ldh [rIF], a
     ei
 
+    call BootScreen
+
 ; ------------------------------------------------------------- title -------
 StartTitle:
     ld sp, $E000
@@ -434,15 +436,114 @@ StartTitle:
     call TitleChoice
     and a
     jr nz, .new
-    xor a
-    ld [wWinOn], a
-    call ContinueGame
+    call TitleLoad
+    jp nc, StartTitle
     jp GameLoop
 .new:
+    call ShowLoading
     xor a
     ld [wWinOn], a
     call NewGame
     jp GameLoop
+
+; developer logo screen: crest + studio name, ~2.5 s or any button
+BootScreen:
+    call LCDOff
+    ld hl, LogoTiles
+    ld de, $9000 + 80 * 16
+    ld bc, LogoTilesEnd - LogoTiles
+    ld a, BANK_GFX
+    call FarCopy
+    call WinClearAll
+    ld c, 3                      ; 4x4 crest at cols 8-11, rows 3-6
+    ld a, 80
+.lr:
+    ld b, 8
+.lc:
+    push af
+    call WinPutTile
+    pop af
+    inc a
+    inc b
+    ld e, a
+    ld a, b
+    cp 12
+    ld a, e
+    jr nz, .lc
+    inc c
+    ld e, a
+    ld a, c
+    cp 7
+    ld a, e
+    jr nz, .lr
+    ld hl, BootList
+    call WinPrintList
+    ld hl, wWinBuf               ; to the BG map
+    ld de, SCRN
+    ld c, 18
+.row:
+    ld b, 20
+.col:
+    ld a, [hl+]
+    ld [de], a
+    inc de
+    dec b
+    jr nz, .col
+    ld a, e
+    add a, 12
+    ld e, a
+    jr nc, .nc
+    inc d
+.nc:
+    dec c
+    jr nz, .row
+    ld a, [wIsCGB]
+    and a
+    jr z, .noAttr
+    ld a, 1
+    ldh [rVBK], a
+    ld hl, SCRN
+    ld bc, 32 * 18
+    ld a, 6
+    call Memset
+    xor a
+    ldh [rVBK], a
+.noAttr:
+    call LCDOn
+    call SfxClear
+    ld b, 150
+.wait:
+    push bc
+    call WaitVBlank
+    call ReadJoypad
+    pop bc
+    ldh a, [hNewKeys]
+    and a
+    jr nz, .fade
+    dec b
+    jr nz, .wait
+.fade:                           ; DMG palette fade to white
+    ld hl, FadeSteps
+    ld c, 4
+.f:
+    ld a, [hl+]
+    ldh [rBGP], a
+    ld b, 6
+.fw:
+    push bc
+    push hl
+    call WaitVBlank
+    pop hl
+    pop bc
+    dec b
+    jr nz, .fw
+    dec c
+    jr nz, .f
+    ld a, %11100100
+    ldh [rBGP], a
+    ret
+
+FadeSteps: db %10010000, %01000000, %00000000, %00000000
 
 TitleChoice:                     ; -> a = 0 continue, 1 new game
     call WinClearAll
@@ -3480,6 +3581,15 @@ EnterTable:  db 1, 124, 1, 6,  0, 140, 0, 4
 SECTION "Text", ROMX, BANK[1]
 
 
+BootList:
+    TXT 5, 9, StrDev
+    TXT 6, 11, StrPresents
+    TXT 3, 15, StrMadeWith
+    db $FF
+StrDev:      db "ARKANSASIO", $FF
+StrPresents: db "PRESENTS", $FF
+StrMadeWith: db "MADE FOR GBC/SP", $FF
+
 TitleList:
     TXT 3, 3, StrTitle
     TXT 4, 5, StrTagline
@@ -3489,7 +3599,7 @@ TitleList:
     TXT 3, 16, StrCredit
     db $FF
 StrTitle:    db "ARPG GB QUEST", $FF
-StrTagline:  db "VERSION 0.4.0", $FF
+StrTagline:  db "VERSION 0.4.1", $FF
 StrGoal1:    db "FIVE LANDS. FOUR", $FF
 StrGoal2:    db "SEALS. ONE OGRE.", $FF
 StrPress:    db "PRESS START", $FF
@@ -3539,7 +3649,7 @@ StrRetire:   db "RETIRE", $FF
 StrMap:      db "MAP", $FF
 StrQuests:   db "QUESTS", $FF
 StrSave:     db "SAVE", $FF
-StrContinue: db "CONTINUE", $FF
+StrContinue: db "LOAD GAME", $FF
 StrNewGame:  db "NEW GAME", $FF
 StrWorldMap: db "WORLD MAP", $FF
 StrPage:     db "PAGE  /2", $FF
@@ -3782,6 +3892,9 @@ wShopTop:      db
 wDlgPtr:       dw
 wDlgEnd:       dw
 wClassCur:     db
+wSlot:         db
+wSlotCur:      db
+wSlotMode:     db
 wQState:       ds 4
 wQKill:        ds 4
 wWasCrit:      db
