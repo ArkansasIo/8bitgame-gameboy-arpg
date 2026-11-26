@@ -98,6 +98,13 @@ DEF M_BEAST     EQU 7
 DEF M_BEASTPAGE EQU 8
 DEF M_INTRO     EQU 9
 DEF M_MAP       EQU 10
+DEF M_CLASS     EQU 11
+DEF M_SHOP      EQU 12
+DEF M_SHOPLIST  EQU 13
+DEF M_INN       EQU 14
+DEF M_DIALOG    EQU 15
+DEF M_QUESTS    EQU 16
+DEF INV_SLOTS   EQU 10
 
 DEF DIR_DOWN   EQU 0
 DEF DIR_UP     EQU 1
@@ -184,6 +191,11 @@ DEF E_KY    EQU 9
 DEF E_NOHIT EQU 10
 DEF E_PAL   EQU 11
 
+MACRO TXT                        ; TXT col, row, label
+    db \1, \2
+    dw \3
+ENDM
+
 MACRO SFX_GUARD
     ld a, [wSoundOn]
     and a
@@ -193,6 +205,7 @@ ENDM
 ; graphics + "text" charmap (selected for the rest of the file)
 INCLUDE "gfx.inc"
 INCLUDE "world.inc"
+INCLUDE "data.inc"
 
 NEWCHARMAP room
 CHARMAP ".", 1
@@ -432,6 +445,7 @@ GameLoop:
 .play:
     call UpdatePlayer
     call UpdateEnemies
+    call UpdateProjectile
     call UpdatePickup
     call CheckRoomClear
     call DrawSprites
@@ -454,10 +468,6 @@ NewGame:
     ld a, 1
     ld [wLevel], a
     ld [wSecondWind], a
-    ld a, 2
-    ld [wItems + 0], a           ; potions of healing
-    ld a, 1
-    ld [wItems + 1], a           ; elixir
     ld a, 72
     ld [wPlayerX], a
     ld a, 56
@@ -479,18 +489,22 @@ NewGame:
     ld [wSeen + 1], a
     ld [wBeastPage], a
     ld [wBannerT], a
-    dec a
-    ld [wLoadedZone], a
+    ld [wInvCur], a
+    ld [wInvTop], a
+    ld [wSkillCur], a
+    ld [wProjOn], a
     ld [wPauseCur], a
     ld [wItemCur], a
     ld [wBeastCur], a
+    ld a, $FF
+    ld [wLoadedZone], a
     ld a, STATE_PLAY
     ld [wGameState], a
     call BuildHUD
     ld a, 1
     ld [wHudOn], a
     call LoadRoom
-    jp OpenIntro
+    jp OpenClassSelect
 
 ; ============================================================ rooms ========
 LoadRoom:
@@ -706,6 +720,13 @@ IsSeen:                          ; a = index (0..) -> nz if seen
     and [hl]
     ret
 
+FarCopy:                         ; a = bank, hl = src, de = dst, bc = len (ROM0 only!)
+    ld [rROMB0], a
+    call Memcpy
+    ld a, BANK_MAIN
+    ld [rROMB0], a
+    ret
+
 LoadBiome:                       ; LCD off. tiles 1-6 + palettes for wZone
     ld a, [wZone]
     ld l, a
@@ -765,11 +786,13 @@ CheckRoomClear:
     jr nz, .l
     ld a, 1
     ld [wRested], a
-    ld [wSecondWind], a          ; short rest: Second Wind recharges
+    ld [wCharge1], a             ; short rest: class charges recharge
+    ld [wCharge2], a
     jp SfxClear
 
 ; ============================================================ player =======
 UpdatePlayer:
+    call ClassTick
     ld a, [wMsgT]
     and a
     jr z, .noMsg
@@ -833,10 +856,24 @@ UpdatePlayer:
     ld a, 1
     ld [wPlayerMoving], a
     call PlayerTryMove
+    ld a, [wDashT]               ; rogue dash: double speed
+    and a
+    call nz, PlayerTryMove
 .attack:
     ldh a, [hNewKeys]
-    and PAD_A | PAD_B
+    and PAD_A
+    jr nz, .aPress
+    ldh a, [hNewKeys]
+    and PAD_B
     jr z, .noNewAttack
+    call ClassBAction
+    jr nz, .room
+    jr .swing
+.aPress:
+    call FindNpcInFront
+    jr nc, .swing
+    jp TalkTo
+.swing:
     ld a, [wAttack]
     and a
     jr nz, .noNewAttack
@@ -1041,7 +1078,12 @@ EnemyAttack:
     ld b, 0
     cp 20
     jr nz, .notCrit
+    ld a, [wArmFlags]            ; adamantine: no critical hits
+    and 4
+    jr nz, .crit0
     ld b, 1                      ; natural 20: hit + double dice
+.crit0:
+    ld a, 20
 .notCrit:
     ld d, a
     inc hl
@@ -1051,7 +1093,11 @@ EnemyAttack:
     jr nz, .hit
     ld a, [hl]
     add a, d
-    cp PLAYER_AC
+    ld c, a
+    call GetPlayerAC
+    ld e, a
+    ld a, c
+    cp e
     jr c, .miss
 .hit:
     inc hl
@@ -1081,6 +1127,15 @@ EnemyAttack:
 
 PlayerTakeDamage:                ; a = damage
     ld b, a
+    ld a, [wDodge]               ; Uncanny Dodge halves it
+    and a
+    jr z, .nd
+    dec a
+    ld [wDodge], a
+    srl b
+    jr nz, .nd
+    inc b
+.nd:
     ld a, [wHP]
     sub b
     jr c, .dead
@@ -1125,10 +1180,26 @@ CheckLevelUp:
     ret c
     ld hl, wLevel
     inc [hl]
-    ld c, 10                     ; fighter hit die d10 + CON
+    ld a, [wHD]                  ; class hit die + CON
+    ld c, a
     call RollDie
-    add a, CON_MOD
     ld b, a
+    ld a, [wCON]
+    add a, b
+    ld b, a
+    ld a, [wMaxSlots]            ; casters gain a slot
+    and a
+    jr z, .noSlot
+    cp 5
+    jr nc, .noSlot
+    inc a
+    ld [wMaxSlots], a
+    ld hl, wSlots
+    inc [hl]
+.noSlot:
+    push bc
+    call RecalcStats
+    pop bc
     ld a, [wMaxHP]
     add a, b
     ld [wMaxHP], a
@@ -1455,7 +1526,9 @@ UpdateCurEnemy:
     jr z, .miss
     cp 20
     jr z, .crit
-    add a, ATK_BONUS
+    ld b, a
+    ld a, [wAtk]
+    add a, b
     cp [hl]                      ; MS_AC
     jr c, .miss
     ld b, 1
@@ -1467,17 +1540,8 @@ UpdateCurEnemy:
     call SetMsg
     ld b, 2                      ; crit: roll the damage dice twice
 .dmg:
-    ld c, 8                      ; longsword d8
-    call RollDice
-    add a, DMG_BONUS
-    ld b, a
-    ld a, [wCur + E_HP]
-    sub b
-    jr c, .kill
-    jr z, .kill
-    ld [wCur + E_HP], a
-    ld a, 16
-    ld [wCur + E_HURT], a
+    call PlayerDamageRoll
+    push af
     ld a, [wPlayerDir]
     add a, a
     ld e, a
@@ -1485,84 +1549,15 @@ UpdateCurEnemy:
     ld hl, DirVec
     add hl, de
     ld a, [hl+]
-    ld [wCur + E_KX], a
+    ld [wHitKX], a
     ld a, [hl]
-    ld [wCur + E_KY], a
-    ld a, [wWasCrit]
-    and a
-    jp nz, SfxCrit
-    jp SfxHit
+    ld [wHitKY], a
+    pop af
+    jp ApplyDamageCur
 .miss:
     ld hl, MsgMiss
     call SetMsg
     jp SfxBlock
-.kill:
-    ld a, [wCur + E_TYPE]
-    call GetTypeStats
-    push hl
-    ld de, MS_XP
-    add hl, de
-    ld a, [hl+]
-    ld e, a
-    ld d, [hl]
-    call AddXP
-    pop hl
-    push hl
-    ld de, MS_FLAGS
-    add hl, de
-    ld a, [hl]
-    and a
-    jr z, .notBoss
-    bit 7, a
-    jr z, .zoneBoss
-    pop hl                       ; the Ogre falls: victory
-    xor a
-    ld [wCur + E_TYPE], a
-    call SfxKill
-    jp ShowWin
-.zoneBoss:
-    ld b, a
-    ld a, [wBossFlags]
-    or b
-    ld [wBossFlags], a
-    ld hl, MsgBoss
-    call SetMsg
-.notBoss:
-    pop hl
-    ld a, [wPickupOn]
-    and a
-    jr nz, .noDrop
-    ld de, MS_GOLD
-    add hl, de
-    ld a, [hl]
-    and a
-    jr z, .heartRoll
-    ld c, a                      ; gold die
-    call Rand
-    and 1
-    jr z, .heartRoll
-    call RollDie
-    ld [wPickupAmt], a
-    ld a, 1
-    jr .drop
-.heartRoll:
-    call Rand
-    and 3
-    jr nz, .noDrop
-    xor a
-.drop:
-    ld [wPickupType], a
-    ld a, 1
-    ld [wPickupOn], a
-    ld a, [wCur + E_X]
-    ld [wPickupX], a
-    ld a, [wCur + E_Y]
-    ld [wPickupY], a
-.noDrop:
-    xor a
-    ld [wCur + E_TYPE], a
-    jp SfxKill
-
 EnemyTryMove:                    ; d = dx, e = dy; preserves de
     ld a, d
     and a
@@ -1732,6 +1727,17 @@ UpdatePickup:
     ld a, [wPickupType]
     and a
     jr z, .heart
+    cp 2
+    jr nz, .coins
+    ld a, [wPickupAmt]           ; dropped gear / potion
+    call InvAdd
+    ld hl, MsgLoot
+    jr nc, .lootOk
+    ld hl, MsgFull
+.lootOk:
+    call SetMsg
+    jp SfxPickup
+.coins:
     ld a, [wPickupAmt]           ; coins
     call AddGold
     ld hl, MsgGold
@@ -1753,12 +1759,8 @@ UpdatePickup:
     call SetMsg
     jp SfxPickup
 .toPotion:                       ; at full HP a heart becomes a potion
-    ld a, [wItems]
-    cp MAX_ITEM
-    jr nc, .full
-    inc a
-    ld [wItems], a
-.full:
+    ld a, ITEM_POTION
+    call InvAdd
     ld hl, MsgPotion
     call SetMsg
     jp SfxPickup
@@ -1787,6 +1789,7 @@ DrawSprites:
     call DrawSword
     call DrawEnemies
     call DrawPickup
+    call DrawProjectile
     ld a, [wGameState]
     cp STATE_PLAY
     ret nz
@@ -1977,6 +1980,10 @@ DrawPickup:
     ld a, [wPickupType]
     and a
     jp z, DrawSprite8
+    cp 2
+    ld d, T_SPARK
+    ld e, OP_SWORD
+    jp z, DrawSprite8
     ld d, T_COIN
     ld e, OP_SWORD
     jp DrawSprite8
@@ -1988,6 +1995,7 @@ AddGold:                         ; a = amount, capped at 999
     ld a, [hl]
     adc a, 0
     ld [hl], a
+ClampGold:
     ld a, [wGold + 1]
     cp HIGH(1000)
     jr c, .ok
@@ -2578,6 +2586,7 @@ UpdateMenu:
 MenuHandlers:
     dw MenuPause, MenuStatus, MenuItems, MenuItemSub, MenuBoxMsg
     dw MenuOptions, MenuSkills, MenuBeast, MenuBeastPage, MenuIntro, MenuMap
+    dw MenuClass, MenuShop, MenuShopList, MenuInn, MenuDialog, MenuQuests
 
 EnterMenuState:
     ld a, STATE_MENU
@@ -2685,328 +2694,12 @@ Retire:
     jp StartTitle
 
 ; ---- status (character sheet) -------------------------------------------
-OpenStatus:
-    ld a, M_STATUS
-    ld [wMenu], a
-    call WinClearAll
-    ld b, 0
-    ld c, 0
-    ld d, 20
-    ld e, 18
-    call DrawBox
-    ld hl, StatusList
-    call WinPrintList
-    ld a, [wLevel]
-    ld b, 14
-    ld c, 2
-    call WinPutNum2
-    ld a, [wHP]
-    ld b, 5
-    ld c, 5
-    call WinPutNum2
-    ld a, [wMaxHP]
-    ld b, 8
-    ld c, 5
-    call WinPutNum2
-    ld a, [wXP]
-    ld e, a
-    ld a, [wXP + 1]
-    ld d, a
-    call Num16ToStr
-    ld hl, wNumBuf
-    ld b, 7
-    ld c, 6
-    call WinPrint
-    ld a, [wLevel]               ; XP needed for next level
-    cp MAX_LEVEL
-    jr nc, .max
-    dec a
-    add a, a
-    ld e, a
-    ld d, 0
-    ld hl, LevelTable
-    add hl, de
-    ld a, [hl+]
-    ld e, a
-    ld d, [hl]
-    call Num16ToStr
-    ld hl, wNumBuf
-    jr .next
-.max:
-    ld hl, StrMax
-.next:
-    ld b, 7
-    ld c, 7
-    call WinPrint
-    call CountCleared
-    add a, T_DIGIT0
-    ld b, 9
-    ld c, 16
-    call WinPutTile
-    ld a, [wSecondWind]
-    add a, T_DIGIT0
-    ld b, 14
-    ld c, 15
-    call WinPutTile
-    ld a, 7
-    ld b, 0
-    ld c, 144
-    call SetWindow
-    call ShowFresh
-    jp ClearOAM
-
 MenuStatus:
     ldh a, [hNewKeys]
     and PAD_A | PAD_B | PAD_START
     ret z
     call SfxMenu
     jp ReturnToPause
-
-; ---- items ---------------------------------------------------------------
-OpenItems:
-    ld a, M_ITEMS
-    ld [wMenu], a
-    call WinClearAll
-    ld b, 0
-    ld c, 0
-    ld d, 18
-    ld e, 9
-    call DrawBox
-    ld hl, ItemList
-    call WinPrintList
-    call ItemCounts
-    ld a, T_CUR
-    call ItemCursor
-    ld a, 2 * 8 + 7
-    ld b, 16
-    ld c, 16 + 9 * 8
-    call SetWindow
-    call ShowFresh
-    jp ReshowSprites
-
-ItemCounts:
-    ld a, "*"
-    ld b, 13
-    ld c, 2
-    call WinPutTile
-    ld a, [wItems + 0]
-    inc b
-    call WinPutNum2
-    ld a, "*"
-    ld b, 13
-    ld c, 4
-    call WinPutTile
-    ld a, [wItems + 1]
-    inc b
-    jp WinPutNum2
-
-ItemCursor:                      ; a = cursor tile
-    push af
-    ld a, [wItemCur]
-    ld e, a
-    pop af
-    ld b, 1
-    ld c, 2
-    ld d, 3
-    jp DrawListCursor
-
-BackToItems:
-    ld a, M_ITEMS
-    ld [wMenu], a
-    ld a, T_CUR
-    call ItemCursor
-    call ItemCounts
-    ld a, 16 + 9 * 8
-    ld [wWinBottom], a
-    jp ReshowSprites
-
-MenuItems:
-    ld hl, wItemCur
-    ld b, 3
-    call ListNav
-    jr nc, .noMove
-    ld a, T_CUR
-    jp ItemCursor
-.noMove:
-    ldh a, [hNewKeys]
-    and PAD_B
-    jr z, .notB
-    call SfxMenu
-    jp ReturnToPause
-.notB:
-    ldh a, [hNewKeys]
-    and PAD_A
-    ret z
-    call SfxMenu
-    ld a, [wItemCur]
-    cp 2
-    jp z, ReturnToPause
-    ld e, a
-    ld d, 0
-    ld hl, wItems
-    add hl, de
-    ld a, [hl]
-    and a
-    jr nz, OpenItemSub
-    ld hl, StrNoneLeft
-    ld de, StrEmpty
-    ld bc, BackToItems
-    jp ShowBoxMsg
-
-OpenItemSub:
-    ld a, M_ITEMSUB
-    ld [wMenu], a
-    xor a
-    ld [wSubCur], a
-    ld a, T_CURH
-    call ItemCursor
-    ld b, 0
-    ld c, 9
-    ld d, 18
-    ld e, 3
-    call DrawBox
-    ld hl, SubList
-    call WinPrintList
-    call SubCursor
-    ld a, 16 + 12 * 8
-    ld [wWinBottom], a
-    jp HideSpritesUnderWindow
-
-SubCursor:                       ; two spots on one row
-    ld c, 10
-    ld b, 2
-    xor a
-    call WinPutTile
-    ld b, 9
-    xor a
-    call WinPutTile
-    ld b, 2
-    ld a, [wSubCur]
-    and a
-    jr z, .put
-    ld b, 9
-.put:
-    ld a, T_CUR
-    jp WinPutTile
-
-MenuItemSub:
-    ldh a, [hNewKeys]
-    and $F0                      ; any direction toggles USE / TOSS
-    jr z, .noMove
-    ld a, [wSubCur]
-    xor 1
-    ld [wSubCur], a
-    call SfxMenu
-    jp SubCursor
-.noMove:
-    ldh a, [hNewKeys]
-    and PAD_B
-    jr z, .notB
-    call SfxMenu
-    jp BackToItems
-.notB:
-    ldh a, [hNewKeys]
-    and PAD_A
-    ret z
-    call SfxMenu
-    ld a, [wItemCur]
-    ld e, a
-    ld d, 0
-    ld hl, wItems
-    add hl, de
-    ld a, [wSubCur]
-    and a
-    jr z, .use
-    dec [hl]                     ; TOSS
-    ld hl, StrTossed
-    ld de, StrEmpty
-    jr .msg
-.use:
-    push hl
-    ld a, [wMaxHP]
-    ld b, a
-    ld a, [wHP]
-    cp b
-    pop hl
-    jr c, .canHeal
-    ld hl, StrHpFull
-    ld de, StrEmpty
-    jr .msg
-.canHeal:
-    dec [hl]
-    ld a, [wItemCur]
-    and a
-    jr nz, .elixir
-    ld b, 2                      ; Potion of Healing: 2d4 + 2
-    ld c, 4
-    call RollDice
-    add a, 2
-    call HealPlayer
-    ld hl, StrUsedPotion
-    ld de, StrRecovered
-    jr .msg
-.elixir:
-    ld a, 99
-    call HealPlayer
-    ld hl, StrUsedElixir
-    ld de, StrFullyHealed
-.msg:
-    ld bc, BackToItems
-    jp ShowBoxMsg
-
-HealPlayer:                      ; a = amount (capped at max HP)
-    ld b, a
-    ld a, [wHP]
-    add a, b
-    jr c, .cap
-    ld b, a
-    ld a, [wMaxHP]
-    cp b
-    jr c, .cap
-    ld a, b
-    ld [wHP], a
-    jp SfxPickup
-.cap:
-    ld a, [wMaxHP]
-    ld [wHP], a
-    jp SfxPickup
-
-; hl = line 1, de = line 2, bc = handler to run when dismissed
-ShowBoxMsg:
-    ld a, c
-    ld [wMsgBack], a
-    ld a, b
-    ld [wMsgBack + 1], a
-    push de
-    push hl
-    ld a, [wMenu]
-    cp M_SKILLS
-    jr z, .skills
-    ld a, T_CURH
-    call ItemCursor
-    jr .box
-.skills:
-    ld a, T_CURH
-    call SkillCursor
-.box:
-    ld a, M_BOXMSG
-    ld [wMenu], a
-    ld b, 0
-    ld c, 9
-    ld d, 18
-    ld e, 5
-    call DrawBox
-    pop hl
-    ld b, 1
-    ld c, 10
-    call WinPrint
-    pop hl
-    ld b, 1
-    ld c, 12
-    call WinPrint
-    ld a, 16 + 14 * 8
-    ld [wWinBottom], a
-    jp HideSpritesUnderWindow
 
 MenuBoxMsg:
     ldh a, [hNewKeys]
@@ -3018,108 +2711,6 @@ MenuBoxMsg:
     ld a, [wMsgBack + 1]
     ld h, a
     jp hl
-
-; ---- skills (fighter class features) ------------------------------------
-OpenSkills:
-    ld a, M_SKILLS
-    ld [wMenu], a
-    xor a
-    ld [wSkillCur], a
-    call WinClearAll
-    ld b, 0
-    ld c, 0
-    ld d, 18
-    ld e, 9
-    call DrawBox
-    ld hl, SkillList
-    call WinPrintList
-    call SkillUses
-    ld a, T_CUR
-    call SkillCursor
-    ld a, 2 * 8 + 7
-    ld b, 16
-    ld c, 16 + 9 * 8
-    call SetWindow
-    call ShowFresh
-    jp ReshowSprites
-
-SkillUses:
-    ld a, [wSecondWind]
-    add a, T_DIGIT0
-    ld b, 14
-    ld c, 2
-    jp WinPutTile
-
-SkillCursor:
-    push af
-    ld a, [wSkillCur]
-    ld e, a
-    pop af
-    ld b, 1
-    ld c, 2
-    ld d, 2
-    jp DrawListCursor
-
-BackToSkills:
-    ld a, M_SKILLS
-    ld [wMenu], a
-    ld a, T_CUR
-    call SkillCursor
-    call SkillUses
-    ld a, 16 + 9 * 8
-    ld [wWinBottom], a
-    jp ReshowSprites
-
-MenuSkills:
-    ld hl, wSkillCur
-    ld b, 2
-    call ListNav
-    jr nc, .noMove
-    ld a, T_CUR
-    jp SkillCursor
-.noMove:
-    ldh a, [hNewKeys]
-    and PAD_B
-    jr z, .notB
-    call SfxMenu
-    jp ReturnToPause
-.notB:
-    ldh a, [hNewKeys]
-    and PAD_A
-    ret z
-    call SfxMenu
-    ld a, [wSkillCur]
-    and a
-    jp nz, ReturnToPause
-    ld a, [wSecondWind]
-    and a
-    jr nz, .have
-    ld hl, StrNoUses
-    ld de, StrRestHint
-    jr .msg
-.have:
-    ld a, [wMaxHP]
-    ld b, a
-    ld a, [wHP]
-    cp b
-    jr c, .heal
-    ld hl, StrHpFull
-    ld de, StrEmpty
-    jr .msg
-.heal:
-    xor a
-    ld [wSecondWind], a
-    ld c, 10                     ; Second Wind: 1d10 + fighter level
-    call RollDie
-    ld b, a
-    ld a, [wLevel]
-    add a, b
-    call HealPlayer
-    ld hl, StrSecondWind
-    ld de, StrCatchBreath
-.msg:
-    ld bc, BackToSkills
-    jp ShowBoxMsg
 
 ; ---- bestiary (7 per page, 2 pages) -------------------------------------
 OpenBestiary:
@@ -3555,6 +3146,26 @@ LoadPalettes:                    ; LCD must be off
     ldh [rOCPD], a
     dec c
     jr nz, .ob
+    ld a, [wPalSet]              ; colour mode: hero palette by class
+    and a
+    jr nz, .done
+    ld a, $80
+    ldh [rOCPS], a
+    ld a, [wClass]
+    add a, a
+    add a, a
+    add a, a
+    ld e, a
+    ld d, 0
+    ld hl, ClassPals
+    add hl, de
+    ld c, 8
+.cp:
+    ld a, [hl+]
+    ldh [rOCPD], a
+    dec c
+    jr nz, .cp
+.done:
     ld a, BANK_MAIN
     ld [rROMB0], a
     ret
@@ -3956,6 +3567,12 @@ Copy1bpp:
     ret
 
 ; ============================================================ data =========
+INCLUDE "src/classes.asm"
+INCLUDE "src/inventory.asm"
+INCLUDE "src/town.asm"
+INCLUDE "src/combat.asm"
+INCLUDE "src/quests.asm"
+
 SECTION "Data", ROMX, BANK[1]
 
 BitTable:   db 1, 2, 4, 8, 16, 32, 64, 128
@@ -3995,10 +3612,6 @@ EnterTable:  db 1, 124, 1, 6,  0, 140, 0, 4
 ; ============================================================ text =========
 SECTION "Text", ROMX, BANK[1]
 
-MACRO TXT                        ; TXT col, row, label
-    db \1, \2
-    dw \3
-ENDM
 
 TitleList:
     TXT 3, 3, StrTitle
@@ -4166,6 +3779,7 @@ MsgLvUp:   db "LV UP"
 MsgHeal:   db "HEAL "
 MsgPotion: db "POT+1"
 MsgGold:   db "GOLD!"
+MsgFull:   db "FULL!"
 MsgBoss:   db "BOSS!"
 StrSealed: db "THE CRYPT IS SEALED", $FF
 
@@ -4207,7 +3821,64 @@ wMaxHP:        db
 wLevel:        db
 wXP:           dw
 wSecondWind:   db
-wItems:        ds 2
+wClass:        db
+wSTR:          db
+wDEX:          db
+wCON:          db
+wINT:          db
+wWIS:          db
+wHD:           db
+wWeapon:       db
+wArmor:        db
+wCastMod:      db
+wSkill1:       db
+wSkill2:       db
+wBAction:      db
+wProf:         db
+wAtk:          db
+wAC:           db
+wDmgN:         db
+wDmgS:         db
+wDmgB:         db
+wWpnMagic:     db
+wWpnFlags:     db
+wArmFlags:     db
+wSpellAtk:     db
+wSlots:        db
+wMaxSlots:     db
+wCharge1:      db
+wCharge2:      db
+wSurgeT:       db
+wShieldT:      db
+wDodge:        db
+wPoison:       db
+wDashT:        db
+wCastCD:       db
+wInvCur:       db
+wInvTop:       db
+wTmpItem:      db
+wTmpCount:     db
+wTmpDmg:       db
+wTmpSlot:      db
+wTmpDist:      db
+wTmpTarget:    db
+wTmpSkill:     db
+wCostPtr:      dw
+wHitKX:        db
+wHitKY:        db
+wProjX:        db
+wProjY:        db
+wProjDX:       db
+wProjDY:       db
+wProjT:        db
+wProjKind:     db
+wShopSel:      db
+wShopMode:     db
+wShopCur:      db
+wShopTop:      db
+wDlgPtr:       dw
+wDlgEnd:       dw
+wClassCur:     db
 wWasCrit:      db
 wMsgT:         db
 wMsgPtr:       dw
@@ -4263,6 +3934,9 @@ wWinBottom:    db
 wWinDirtyAny:  db
 wWinDirty:     ds 18
 wWinBuf:       ds 20 * 18
+
+SECTION "Inventory RAM", WRAM0, ALIGN[5]
+wInv:          ds INV_SLOTS * 2
 
 SECTION "HRAM", HRAM
 hOAMDMA:     ds 16
