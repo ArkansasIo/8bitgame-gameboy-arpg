@@ -104,6 +104,7 @@ DEF M_SHOPLIST  EQU 13
 DEF M_INN       EQU 14
 DEF M_DIALOG    EQU 15
 DEF M_QUESTS    EQU 16
+DEF M_SAVEASK   EQU 17
 DEF INV_SLOTS   EQU 10
 
 DEF DIR_DOWN   EQU 0
@@ -424,7 +425,70 @@ StartTitle:
     or 1
     ldh [hRng], a
     call SfxPickup
+    call HasSave
+    jr z, .new
+    call TitleChoice
+    and a
+    jr nz, .new
+    xor a
+    ld [wWinOn], a
+    call ContinueGame
+    jp GameLoop
+.new:
+    xor a
+    ld [wWinOn], a
     call NewGame
+    jp GameLoop
+
+TitleChoice:                     ; -> a = 0 continue, 1 new game
+    call WinClearAll
+    ld b, 0
+    ld c, 0
+    ld d, 20
+    ld e, 6
+    call DrawBox
+    ld hl, StrContinue
+    ld b, 3
+    ld c, 2
+    call WinPrint
+    ld hl, StrNewGame
+    ld b, 3
+    ld c, 4
+    call WinPrint
+    xor a
+    ld [wSubCur], a
+    ld a, 7
+    ld b, 96
+    ld c, 144
+    call SetWindow
+    call ShowFresh
+.loop:
+    ld b, 2
+    ld c, 2
+    ld d, 2
+    ld a, [wSubCur]
+    ld e, a
+    ld a, T_CUR
+    call DrawListCursor
+    call WaitVBlank
+    call ReadJoypad
+    ld hl, hFrame
+    inc [hl]
+    call DrawTitleSprites
+    ldh a, [hNewKeys]
+    and $C0
+    jr z, .noMove
+    ld a, [wSubCur]
+    xor 1
+    ld [wSubCur], a
+    call SfxMenu
+.noMove:
+    ldh a, [hNewKeys]
+    and PAD_A | PAD_START
+    jr z, .loop
+    call SfxMenu
+    ld a, [wSubCur]
+    ret
 
 ; ------------------------------------------------------------ game loop ----
 GameLoop:
@@ -496,6 +560,10 @@ NewGame:
     ld [wPauseCur], a
     ld [wItemCur], a
     ld [wBeastCur], a
+    ld hl, wQState
+    ld bc, 8
+    xor a
+    call Memset
     ld a, $FF
     ld [wLoadedZone], a
     ld a, STATE_PLAY
@@ -2586,7 +2654,7 @@ UpdateMenu:
 MenuHandlers:
     dw MenuPause, MenuStatus, MenuItems, MenuItemSub, MenuBoxMsg
     dw MenuOptions, MenuSkills, MenuBeast, MenuBeastPage, MenuIntro, MenuMap
-    dw MenuClass, MenuShop, MenuShopList, MenuInn, MenuDialog, MenuQuests
+    dw MenuClass, MenuShop, MenuShopList, MenuInn, MenuDialog, MenuQuests, MenuSaveAsk
 
 EnterMenuState:
     ld a, STATE_MENU
@@ -2650,14 +2718,14 @@ ReturnToPause:
     ld b, 0
     ld c, 0
     ld d, 11
-    ld e, 16
+    ld e, 18
     call DrawBox
     ld hl, PauseList
     call WinPrintList
     call PauseCursor
     ld a, 9 * 8 + 7
     ld b, 0
-    ld c, 16 * 8
+    ld c, 144
     call SetWindow
     call ShowFresh
     jp ReshowSprites
@@ -2665,7 +2733,7 @@ ReturnToPause:
 PauseCursor:
     ld b, 1
     ld c, 2
-    ld d, 7
+    ld d, 8
     ld a, [wPauseCur]
     ld e, a
     ld a, T_CUR
@@ -2673,7 +2741,7 @@ PauseCursor:
 
 MenuPause:
     ld hl, wPauseCur
-    ld b, 7
+    ld b, 8
     call ListNav
     jp c, PauseCursor
     ldh a, [hNewKeys]
@@ -2688,7 +2756,7 @@ MenuPause:
     jp JumpTable
 
 PauseActions:
-    dw OpenStatus, OpenItems, OpenSkills, OpenMap, OpenBestiary, OpenOptions, Retire
+    dw OpenStatus, OpenItems, OpenSkills, OpenQuests, OpenMap, OpenBestiary, OpenSaveAsk, OpenOptions
 
 Retire:
     jp StartTitle
@@ -3572,6 +3640,7 @@ INCLUDE "src/inventory.asm"
 INCLUDE "src/town.asm"
 INCLUDE "src/combat.asm"
 INCLUDE "src/quests.asm"
+INCLUDE "src/save.asm"
 
 SECTION "Data", ROMX, BANK[1]
 
@@ -3657,10 +3726,11 @@ PauseList:
     TXT 2, 2, StrStatus
     TXT 2, 4, StrItems
     TXT 2, 6, StrSkills
-    TXT 2, 8, StrMap
-    TXT 2, 10, StrBestiary
-    TXT 2, 12, StrOptions
-    TXT 2, 14, StrRetire
+    TXT 2, 8, StrQuests
+    TXT 2, 10, StrMap
+    TXT 2, 12, StrBestiary
+    TXT 2, 14, StrSave
+    TXT 2, 16, StrOptions
     db $FF
 StrStatus:   db "STATUS", $FF
 StrItems:    db "ITEMS", $FF
@@ -3669,6 +3739,10 @@ StrBestiary: db "BESTIARY", $FF
 StrOptions:  db "OPTIONS", $FF
 StrRetire:   db "RETIRE", $FF
 StrMap:      db "MAP", $FF
+StrQuests:   db "QUESTS", $FF
+StrSave:     db "SAVE", $FF
+StrContinue: db "CONTINUE", $FF
+StrNewGame:  db "NEW GAME", $FF
 StrWorldMap: db "WORLD MAP", $FF
 StrPage:     db "PAGE  /2", $FF
 
@@ -3879,6 +3953,8 @@ wShopTop:      db
 wDlgPtr:       dw
 wDlgEnd:       dw
 wClassCur:     db
+wQState:       ds 4
+wQKill:        ds 4
 wWasCrit:      db
 wMsgT:         db
 wMsgPtr:       dw

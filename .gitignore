@@ -3,3 +3,4 @@ game.sym
 game.map
 shots/
 __pycache__/
+*.ram
