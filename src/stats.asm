@@ -307,12 +307,13 @@ StoreW:                          ; [de] = hl
 
 ; ---- derived sub-stats (framework section 3-6) ---------------------------------------
 RecalcStats:
+    call GearBonus
     ; MaxHP = VIT*8 + CON*5 + LV*4 + 40
-    ld hl, wVit
+    ld hl, wEVit
     ld a, 8
     call AttrMul
     push hl
-    ld hl, wCon
+    ld hl, wECon
     ld a, 5
     call AttrMul
     pop de
@@ -325,65 +326,36 @@ RecalcStats:
     call AddSat
     ld de, 40
     call AddSat
+    ld de, gAcc + 26             ; + gear HP
+    call AddAttr
     ld de, wMaxHP
     call StoreW
     ; MaxMP = INT*3 + SPI*4 + 10
-    ld hl, wInt
+    ld hl, wEInt
     ld a, 3
     call AttrMul
     push hl
-    ld hl, wSpi
+    ld hl, wESpi
     ld a, 4
     call AttrMul
     pop de
     call AddSat
     ld de, 10
     call AddSat
+    ld de, gAcc + 28             ; + gear MP
+    call AddAttr
     ld de, wMaxMP
     call StoreW
-    ; weapon base = (n*(s+1)/2 + magic) * 4 (+28 fire)
-    xor a
-    ld [wWpnBase], a
+    ld a, [gWpnFlags]
     ld [wWpnFlags], a
-    ld a, [wWeapon]
-    and a
-    jr z, .noW
-    call GetItem
-    ld de, 4
-    add hl, de
-    ld a, [hl+]
-    ld c, a
-    ld a, [hl+]
-    inc a
-    srl a
-    ld b, a
-    xor a
-.wm:
-    add a, b
-    dec c
-    jr nz, .wm
-    add a, [hl]
-    inc hl
-    add a, a
-    add a, a
-    ld b, a
-    ld a, [hl]
-    ld [wWpnFlags], a
-    and 2
-    ld a, b
-    jr z, .nf
-    add a, 28
-.nf:
-    ld [wWpnBase], a
-.noW:
     ; ATK (physical power) = 2.5 * max(STR, DEX if finesse) + weapon + LV
-    ld hl, wStr
+    ld hl, wEStr
     call LoadW
     ld a, [wWpnFlags]
     and 1
     jr z, .str
     push hl
-    ld hl, wDex
+    ld hl, wEDex
     call LoadW
     ld d, h
     ld e, l
@@ -394,81 +366,74 @@ RecalcStats:
     call MulHL_A
     srl h
     rr l
-    ld a, [wWpnBase]
+    ld a, [gWpn]
     ld e, a
-    ld d, 0
+    ld a, [gWpn + 1]
+    ld d, a
     call AddSat
+    ld de, gAcc + 20             ; + gear ATK
+    call AddAttr
     call AddLevel
     ld de, wATK
     call StoreW
     ; MAG (spell power) = 2.5 * INT + WIS + LV
-    ld hl, wInt
+    ld hl, wEInt
     ld a, 5
     call AttrMul
     srl h
     rr l
-    ld de, wWis
+    ld de, wEWis
     call AddAttr
     call AddLevel
+    ld de, gAcc + 22             ; + gear MAG
+    call AddAttr
     ld de, wMAG
     call StoreW
     ; HEAL (healing power) = 2 * WIS + SPI
-    ld hl, wWis
+    ld hl, wEWis
     call LoadW
     add hl, hl
-    ld de, wSpi
+    ld de, wESpi
     call AddAttr
     ld de, wHEAL
     call StoreW
     ; ACC = 2*DEX + 2*LV + 50 ; EVA = DEX + LCK/2 + LV
-    ld hl, wDex
+    ld hl, wEDex
     call LoadW
     add hl, hl
     call AddLevel
     call AddLevel
     ld de, 50
     call AddSat
+    ld de, gAcc + 36
+    call AddAttr
     ld de, wACC
     call StoreW
-    ld hl, wLck
+    ld hl, wELck
     call LoadW
     srl h
     rr l
-    ld de, wDex
+    ld de, wEDex
     call AddAttr
     call AddLevel
+    ld de, gAcc + 38
+    call AddAttr
     ld de, wEVA
     call StoreW
-    ; armor base from gear = (AC + magic) * 2
-    xor a
-    ld [wArmBase], a
-    ld [wArmFlags], a
-    ld a, [wArmor]
-    and a
-    jr z, .noA
-    call GetItem
-    ld de, 4
-    add hl, de
-    ld a, [hl+]
-    inc hl
-    add a, [hl]
-    inc hl
-    add a, a
-    ld [wArmBase], a
-    ld a, [hl]
-    ld [wArmFlags], a
-.noA:
     ; ARMOR = gear + CON + VIT/2 + LV/2
-    ld hl, wVit
+    ld hl, wEVit
     call LoadW
     srl h
     rr l
-    ld de, wCon
+    ld de, wECon
     call AddAttr
-    ld a, [wArmBase]
+    ld a, [gArmor]
     ld e, a
-    ld d, 0
+    ld a, [gArmor + 1]
+    ld d, a
     call AddSat
+    ld de, gAcc + 24             ; + gear armor affixes
+    call AddAttr
     push hl
     ld hl, wLevel
     call LoadW
@@ -479,59 +444,67 @@ RecalcStats:
     ld de, wDEF
     call StoreW
     ; RESIST = WIS + SPI/2 + WIL/2
-    ld hl, wSpi
+    ld hl, wESpi
     call LoadW
     push hl
-    ld hl, wWil
+    ld hl, wEWil
     call LoadW
     pop de
     add hl, de
     srl h
     rr l
-    ld de, wWis
+    ld de, wEWis
+    call AddAttr
+    ld de, gAcc + 48
     call AddAttr
     ld de, wRES
     call StoreW
     ; percentages ---------------------------------------------------
-    ld hl, wDex                  ; CRIT% = 5 + DEX/25 + LCK/20 (cap 60)
+    ld hl, wEDex                  ; CRIT% = 5 + DEX/25 + LCK/20 (cap 60)
     ld a, 25
     call AttrDiv
     push hl
-    ld hl, wLck
+    ld hl, wELck
     ld a, 20
     call AttrDiv
     pop de
     add hl, de
     ld de, 5
     add hl, de
+    ld de, gAcc + 30             ; + gear crit
+    call AddAttr
     ld a, 60
     call CapHL
     ld [wCrit], a
-    ld hl, wLck                  ; CRIT DMG% = 50 + LCK/10 (cap 250)
+    ld hl, wELck                  ; CRIT DMG% = 50 + LCK/10 (cap 250)
     ld a, 10
     call AttrDiv
     ld de, 50
     add hl, de
+    ld de, gAcc + 32
+    call AddAttr
     ld a, 250
     call CapHL
     ld [wCritDmg], a
-    ld hl, wCon                  ; BLOCK% = CON/60 (cap 25)
+    ld hl, wECon                  ; BLOCK% = CON/60 (cap 25)
     ld a, 60
     call AttrDiv
-    ld a, 25
+    ld de, gAcc + 34
+    call AddAttr
+    ld a, 40
     call CapHL
     ld [wBlockP], a
-    ld hl, wWil                  ; TENACITY% = WIL/20 (cap 50)
+    ld hl, wEWil                  ; TENACITY% = WIL/20 (cap 50)
     ld a, 20
     call AttrDiv
     ld a, 50
     call CapHL
     ld [wTen], a
-    ld hl, wWil                  ; STATUS RESIST% = WIL/25 + CON/50 (cap 60)
+    ld hl, wEWil                  ; STATUS RESIST% = WIL/25 + CON/50 (cap 60)
     ld a, 25
     call AttrDiv
     push hl
-    ld hl, wCon
+    ld hl, wECon
     ld a, 50
     call AttrDiv
     pop de
@@ -539,35 +512,38 @@ RecalcStats:
     ld a, 60
     call CapHL
     ld [wSRes], a
-    ld hl, wWis                  ; CDR% = WIS/50 (cap 30)
+    ld hl, wEWis                  ; CDR% = WIS/50 (cap 30)
     ld a, 50
     call AttrDiv
     ld a, 30
     call CapHL
     ld [wCDR], a
-    ld hl, wStr                  ; ARMOR PEN% = STR/40, MAGIC PEN% = INT/40 (cap 40)
+    ld hl, wEStr                  ; ARMOR PEN% = STR/40, MAGIC PEN% = INT/40 (cap 40)
     ld a, 40
     call AttrDiv
     ld a, 40
     call CapHL
     ld [wAPen], a
-    ld hl, wInt
+    ld hl, wEInt
     ld a, 40
     call AttrDiv
     ld a, 40
     call CapHL
     ld [wMPen], a
-    ld hl, wCha                  ; DISCOUNT% = CHA/20 (cap 30)
+    ld hl, wECha                  ; DISCOUNT% = CHA/20 (cap 30)
     ld a, 20
     call AttrDiv
     ld a, 30
     call CapHL
     ld [wDiscount], a
-    ld hl, wDex                  ; swing time 12 - DEX/150 - haste buff (min 5)
+    ld hl, wEDex                  ; swing time 12 - DEX/150 - haste buff (min 5)
     ld a, 150
     call AttrDiv
     ld a, 6
     call CapHL
+    ld b, a
+    ld a, [gAcc + 46]            ; gear haste
+    add a, b
     ld b, a
     ld a, [wBuffHaste]
     and a
@@ -576,6 +552,11 @@ RecalcStats:
     inc b
     inc b
 .nh:
+    ld a, b
+    cp 8
+    jr c, .hok
+    ld b, 7
+.hok:
     ld a, ATTACK_TIME
     sub b
     ld [wAtkTime], a
@@ -749,7 +730,17 @@ XpNeeded:                        ; de = 15 + LV*8 + (LV/8)^2
     ld e, l
     ret
 
-AddXP:                           ; de = XP gained
+AddXP:                           ; de = XP gained (+ gear XP%)
+    push de
+    ld a, 22
+    call GearPct
+    pop hl
+    push hl
+    call ReducePctInv
+    pop de
+    add hl, de
+    ld d, h
+    ld e, l
     ld hl, wXP
     ld a, [hl]
     add a, e
@@ -992,7 +983,7 @@ EnemyAttack:
     call Clamp595
     ld b, a
     call Chance
-    jr nc, .dodged
+    jp nc, .dodged
     ld hl, wMATK
     call LoadW
     call Spread
@@ -1036,9 +1027,21 @@ EnemyAttack:
     push hl
     ld hl, MsgBlock
     call SetMsg
+    ld a, 11                     ; BULWARK: blocking heals 3%
+    call HasAspect
+    jr z, .nbw
+    ld a, 1
+    call HpFraction
+    srl h
+    rr l
+    call HealQuiet
+.nbw:
     pop hl
     call SfxBlock
 .nb:
+    push hl
+    call OnHeroHurt              ; THORNS
+    pop hl
     push hl
     call MonsterOnHit            ; maybe inflict this monster's debuff
     pop hl
@@ -1676,7 +1679,9 @@ Sheet1Labels:
     TXT 10, 10, StrCHA
     TXT 1, 12, StrPTS
     TXT 1, 13, StrGoldL
+    TXT 10, 12, StrPWR
     db $FF
+StrPWR: db "PWR", $FF
 Sheet1Values:
     db 6, 2
     dw wHP
@@ -1694,40 +1699,43 @@ Sheet1Values:
     dw wXP
     db 0
     db 4, 6
-    dw wStr
+    dw wEStr
     db 0
     db 14, 6
-    dw wDex
+    dw wEDex
     db 0
     db 4, 7
-    dw wCon
+    dw wECon
     db 0
     db 14, 7
-    dw wInt
+    dw wEInt
     db 0
     db 4, 8
-    dw wWis
+    dw wEWis
     db 0
     db 14, 8
-    dw wVit
+    dw wEVit
     db 0
     db 4, 9
-    dw wSpi
+    dw wESpi
     db 0
     db 14, 9
-    dw wLck
+    dw wELck
     db 0
     db 4, 10
-    dw wWil
+    dw wEWil
     db 0
     db 14, 10
-    dw wCha
+    dw wECha
     db 0
     db 5, 12
     dw wStatPts
     db 0
     db 5, 13
     dw wGold
+    db 0
+    db 14, 12
+    dw wPowerLvl
     db 0
     db $FF
 Sheet2Labels:

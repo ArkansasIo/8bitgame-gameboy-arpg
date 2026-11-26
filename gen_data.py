@@ -27,14 +27,14 @@ ITEMS = [
     ("CHAIN MAIL+1", 2, 2,  500, 16, 0, 1, 0),
     ("FLAME TONGUE", 1, 3,  900, 1, 8, 0, 2),
     ("ADAMANTINE",   2, 2,  800, 18, 0, 0, 4),
+    ("IRON ORE",     3, 0,   20, 0, 0, 0, 0),
 ]
 ID = {it[0]: i + 1 for i, it in enumerate(ITEMS)}
-SHOP = ["POTION", "GR.POTION", "ELIXIR", "DAGGER", "SHORTSWORD", "MACE", "RAPIER",
-        "LONGSWORD", "GREATSWORD", "LEATHER", "CHAIN SHIRT", "CHAIN MAIL", "PLATE"]
+SHOP = ["POTION", "GR.POTION", "ELIXIR", "IRON ORE"]
 # zone boss loot (by boss flag bit): spider, mummy, winter wolf, giant toad
 BOSS_LOOT = ["RAPIER+1", "CHAIN MAIL+1", "FLAME TONGUE", "ADAMANTINE"]
 # random common drops (1 in 16 kills)
-RANDOM_LOOT = ["DAGGER", "SHORTSWORD", "MACE", "LONGSWORD", "LEATHER", "CHAIN SHIRT", "POTION", "GR.POTION"]
+RANDOM_LOOT = ["IRON ORE", "IRON ORE", "IRON ORE", "POTION", "POTION", "GR.POTION", "IRON ORE", "ELIXIR"]
 
 # skills: name, desc1, desc2, kind (0 = charge, recharges on short rest; 1 = spell slot)
 SKILLS = [
@@ -68,7 +68,7 @@ L.append(f"DEF NUM_SHOP EQU {len(SHOP)}")
 for name, i in ID.items():
     L.append(f"DEF ITEM_{name.replace(' ', '_').replace('+', 'P').replace('.', '_')} EQU {i}")
 L.append("")
-L.append('SECTION "GameData", ROMX, BANK[1]')
+L.append('SECTION "GameData", ROM0')
 L.append("; type rarity priceLo priceHi p1 p2 p3 p4")
 L.append("ItemTable:")
 for name, typ, rar, price, p1, p2, p3, p4 in ITEMS:

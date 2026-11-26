@@ -59,29 +59,20 @@ ApplyDamageCur:
     ld a, [wBossFlags]
     or b
     ld [wBossFlags], a
-    ld c, 0                      ; boss loot: bit index -> BossLoot
-.bit:
-    srl b
-    jr c, .gotBit
-    inc c
-    jr .bit
-.gotBit:
-    ld hl, BossLoot
-    ld a, l
-    add a, c
-    ld l, a
-    jr nc, .nc
-    inc h
-.nc:
-    ld a, [hl]
-    call InvAdd
-    ld hl, MsgLoot
+    ld hl, MsgBoss
     call SetMsg
 .notBoss:
+    pop hl
+    push hl
+    call OnHeroKill
     pop hl
     ld a, [wPickupOn]
     and a
     jr nz, .noDrop
+    push hl
+    call MaybeDropGear           ; gear first (bosses always)
+    pop hl
+    jr c, .noDrop
     call Rand                    ; 1 in 16: random gear / potion
     and 15
     jr nz, .noItem
@@ -96,7 +87,7 @@ ApplyDamageCur:
     ld a, [hl]
     ld [wPickupAmt], a
     ld a, 2
-    jr .drop
+    jr .drop2
 .noItem:
     push hl
     ld a, [wCur + E_TYPE]
@@ -121,6 +112,7 @@ ApplyDamageCur:
     jr nz, .noDrop
     xor a
 .drop:
+.drop2:
     ld [wPickupType], a
     ld a, 1
     ld [wPickupOn], a

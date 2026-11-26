@@ -1,7 +1,7 @@
 ; ============================================================================
 ;  TOWN - talking to townsfolk, dialogue boxes, merchant shop, inn
 ; ============================================================================
-SECTION "Town", ROMX, BANK[1]
+SECTION "Town", ROM0
 
 ; ---- who is in front of the hero? -----------------------------------------
 ; carry set + a = NPC type when an NPC stands in front (town only)
@@ -302,43 +302,47 @@ DrawShopModes:
     ld hl, ShopModeList
     call WinPrintList
 ShopModeCursor:
-    ld c, 15
-    ld b, 2
+    ld hl, ShopCurPos
+    ld c, 4
+.clr:
+    ld a, [hl+]
+    ld b, a
+    ld a, [hl+]
+    push bc
+    ld c, a
     xor a
     call WinPutTile
-    ld b, 8
-    xor a
-    call WinPutTile
-    ld b, 14
-    xor a
-    call WinPutTile
+    pop bc
+    dec c
+    jr nz, .clr
     ld a, [wShopSel]
-    ld b, a
     add a, a
-    add a, b
-    add a, a                     ; *6
-    add a, 2
+    ld hl, ShopCurPos
+    call AddHLA
+    ld a, [hl+]
     ld b, a
+    ld c, [hl]
     ld a, T_CUR
     jp WinPutTile
+
+ShopCurPos: db 1, 14,  9, 14,  1, 16,  9, 16
 
 MenuShop:
     ldh a, [hNewKeys]
     ld b, a
-    bit 5, b
-    jr z, .nl
+    and $90                      ; right / down
+    jr z, .nf
     ld a, [wShopSel]
-    and a
-    ret z
-    dec a
+    inc a
+    and 3
     jr .set
-.nl:
-    bit 4, b
+.nf:
+    ld a, b
+    and $60                      ; left / up
     jr z, .nr
     ld a, [wShopSel]
-    cp 2
-    ret nc
-    inc a
+    dec a
+    and 3
 .set:
     ld [wShopSel], a
     call SfxMenu
@@ -352,8 +356,10 @@ MenuShop:
     ret z
     call SfxMenu
     ld a, [wShopSel]
-    cp 2
+    cp 3
     jp z, CloseMenu
+    cp 2
+    jp z, OpenSmith
     inc a
     ld [wShopMode], a            ; 1 = buy, 2 = sell
     xor a
@@ -608,9 +614,10 @@ AddGold16:                       ; de = amount, capped at 999
     jp ClampGold
 
 ShopModeList:
-    TXT 3, 15, StrBuy
-    TXT 9, 15, StrSell
-    TXT 15, 15, StrExitW
+    TXT 2, 14, StrBuy
+    TXT 10, 14, StrSell
+    TXT 2, 16, StrSmith
+    TXT 10, 16, StrExitW
     db $FF
 
 ; ---- dialogue text -------------------------------------------------------------
@@ -638,6 +645,7 @@ StrMerchant: db "MERCHANT", $FF
 StrBuy:      db "BUY", $FF
 StrSell:     db "SELL", $FF
 StrExitW:    db "EXIT", $FF
+StrSmith:    db "SMITH", $FF
 StrBought:   db "BOUGHT IT!", $FF
 StrSold:     db "SOLD!", $FF
 StrPoor:     db "NOT ENOUGH GOLD.", $FF

@@ -128,11 +128,7 @@ ApplyClass:
     ld bc, INV_SLOTS * 2
     xor a
     call Memset
-    ld a, [wWeapon]
-    call InvAdd
-    ld a, [wArmor]
-    and a
-    call nz, InvAdd
+    call GiveStartingGear
     ld a, ITEM_POTION
     call InvAdd
     ld a, ITEM_POTION

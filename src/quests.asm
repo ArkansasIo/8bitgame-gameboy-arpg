@@ -6,7 +6,7 @@
 ;   Q3 RESTLESS DEAD   (Elder)   slay 5 undead              -> 120 G + LONGSWORD+1
 ;  state: 0 unknown, 1 active, 2 ready to turn in, 3 done
 ; ============================================================================
-SECTION "Quests", ROMX, BANK[1]
+SECTION "Quests", ROM0
 
 DEF Q_MAIN   EQU 0
 DEF Q_WOLVES EQU 1
@@ -109,8 +109,14 @@ TalkElder:
     ld [hl], 3
     ld de, 120
     call AddGold16
-    ld a, ITEM_LONGSWORDP1
-    call InvAdd
+    ld a, [wLevel]               ; an epic main-hand at your level
+    ld [wGenLvl], a
+    ld a, [wLevel + 1]
+    ld [wGenLvl + 1], a
+    ld a, 3
+    ld b, 0
+    call GenGear
+    call AddGear
     call SfxWin
     ld hl, DlgElderReward
     jr .say
@@ -352,7 +358,7 @@ DlgElderReward:
 .a: db "THE DEAD REST.", $FF
 .b: db "TAKE THIS BLADE", $FF
 .c: db "AND 120 GOLD.", $FF
-.d: db "GOT LONGSWORD+1!", $FF
+.d: db "GOT EPIC WEAPON!", $FF
 DlgGuardWolves:
     dw .a, .b
     dw .c, .d

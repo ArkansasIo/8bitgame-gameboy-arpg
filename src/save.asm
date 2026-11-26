@@ -1,10 +1,10 @@
 ; ============================================================================
 ;  SAVE - battery-backed SRAM save slot (MBC5), continue from the title
 ; ============================================================================
-SECTION "Save", ROMX, BANK[1]
+SECTION "Save", ROM0
 
 DEF SRAM_BASE EQU $A000
-DEF SAVE_VERSION EQU 3
+DEF SAVE_VERSION EQU 4
 
 ; persistent RAM blocks: dw address, db length
 SaveMap:
@@ -26,6 +26,10 @@ SaveMap:
     db 2
     dw wPlayerX
     db 2
+    dw wEquip
+    db NUM_GEAR_SLOTS * 8
+    dw wGear
+    db GEAR_BAG * 8
     dw 0
 
 SramOn:
@@ -44,6 +48,7 @@ DEF NUM_SLOTS EQU 5
 
 SlotBase:                        ; hl = de = $A000 + slot * $100
     ld a, [wSlot]
+    add a, a                     ; 512 bytes per slot
     add a, HIGH(SRAM_BASE)
     ld h, a
     ld d, a
@@ -140,29 +145,27 @@ CheckSave:                       ; (SRAM on) -> nz if valid
     ld a, [hl+]
     cp SAVE_VERSION
     jr nz, .bad
-    ld de, SaveMap               ; total length = sum of block sizes
-    ld b, 0
-.len:
-    ld a, [de]
-    inc de
-    ld c, a
-    ld a, [de]
-    inc de
-    or c
-    jr z, .sum
-    ld a, [de]
-    inc de
-    add a, b
-    ld b, a
-    jr .len
-.sum:
+    ld de, SaveMap               ; checksum block by block
     ld c, 0
+.blk:
+    ld a, [de]
+    inc de
+    ld b, a
+    ld a, [de]
+    inc de
+    or b
+    jr z, .sumDone
+    ld a, [de]
+    inc de
+    ld b, a
 .s:
     ld a, [hl+]
     add a, c
     ld c, a
     dec b
     jr nz, .s
+    jr .blk
+.sumDone:
     ld a, [hl]
     cp c
     jr nz, .bad

@@ -8,8 +8,11 @@ InvAdd:
     ld [wTmpItem], a
     call GetItem
     ld a, [hl]                   ; type
+    cp 3
+    jr z, .stack                 ; materials stack
     and a
     jr nz, .newSlot              ; gear never stacks
+.stack:
     ld hl, wInv                  ; stack consumables
     ld b, INV_SLOTS
 .find:
@@ -156,10 +159,9 @@ DrawBag:
     ld d, 20
     ld e, 5
     call DrawBox
-    ld hl, StrBag
-    ld b, 2
-    ld c, 1
-    call WinPrint
+    ld a, 2
+    ld [wBagTab], a
+    call DrawTabs
     ; scroll so the cursor is visible (5 rows)
     ld a, [wInvCur]
     ld b, a
@@ -383,6 +385,10 @@ WinPutItemInfo:
     jp WinPutTile
 
 MenuItems:
+    ldh a, [hNewKeys]
+    ld b, a
+    call BagTabSwitch
+    ret nz
     call InvCount
     and a
     jr z, .onlyBack
@@ -496,6 +502,12 @@ MenuItemSub:
     ld a, [hl]
     and a
     jr z, .use
+    cp 3
+    jr nz, .gearItem
+    ld hl, StrOreUse
+    ld de, StrEmpty
+    jr .msg
+.gearItem:
     cp 1                         ; equip weapon / armor
     ld a, [wTmpItem]
     jr nz, .eqArmor
@@ -592,6 +604,7 @@ ShowPanelMsg:
     jp WinPrint
 
 StrBag:       db "BAG", $FF
+StrOreUse:    db "FOR THE SMITH.", $FF
 StrEmptyBag:  db "EMPTY", $FF
 StrEquip:     db "EQUIP", $FF
 StrEquipped:  db "EQUIPPED!", $FF

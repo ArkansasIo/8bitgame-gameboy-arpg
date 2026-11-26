@@ -1,5 +1,5 @@
 ; ============================================================================
-;  ARPG GB QUEST v0.5.0 (build 20261126) - action RPG for Game Boy Color
+;  ARPG GB QUEST v0.6.0 (build 20261126) - action RPG for Game Boy Color
 ;  Assembler: RGBDS 0.9+   (rgbasm / rgblink / rgbfix)
 ;
 ;  * GBC-enhanced: full color on Game Boy Color / GBA / GBA SP,
@@ -106,6 +106,9 @@ DEF M_DIALOG    EQU 15
 DEF M_QUESTS    EQU 16
 DEF M_SAVEASK   EQU 17
 DEF M_ALLOC     EQU 18
+DEF M_GEAR      EQU 19
+DEF M_GEARSUB   EQU 20
+DEF M_SMITH     EQU 21
 DEF INV_SLOTS   EQU 10
 
 DEF DIR_DOWN   EQU 0
@@ -215,6 +218,7 @@ ENDM
 INCLUDE "gfx.inc"
 INCLUDE "world.inc"
 INCLUDE "data.inc"
+INCLUDE "items.inc"
 
 NEWCHARMAP room
 CHARMAP ".", 1
@@ -1614,6 +1618,8 @@ UpdateCurEnemy:
     call PlayerHitRoll           ; accuracy vs evasion
     jr nc, .miss
     call PlayerMeleeDamage
+    call PowerDamageMods         ; legendary powers
+    call OnHeroHit
     push hl
     ld a, [wPoison]              ; Poison Blade: poison DoT on the target
     and a
@@ -1817,6 +1823,8 @@ UpdatePickup:
     ld a, [wPickupType]
     and a
     jr z, .heart
+    cp 3
+    jp z, PickupGear
     cp 2
     jr nz, .coins
     ld a, [wPickupAmt]           ; dropped gear / potion
@@ -1828,8 +1836,27 @@ UpdatePickup:
     call SetMsg
     jp SfxPickup
 .coins:
-    ld a, [wPickupAmt]           ; coins
-    call AddGold
+    ld a, [wPickupAmt]           ; coins (+gold find %, FORTUNE doubles)
+    ld l, a
+    ld h, 0
+    push hl
+    ld a, 21
+    call GearPct
+    pop hl
+    push hl
+    call ReducePctInv
+    pop de
+    add hl, de
+    push hl
+    ld a, 9
+    call HasAspect
+    pop hl
+    jr z, .nf
+    add hl, hl
+.nf:
+    ld d, h
+    ld e, l
+    call AddGold16
     ld hl, MsgGold
     call SetMsg
     jp SfxPickup
@@ -2062,6 +2089,10 @@ DrawPickup:
     ld e, OP_HEART
     ld a, [wPickupType]
     and a
+    jp z, DrawSprite8
+    cp 3
+    ld d, T_SPARK
+    ld e, OP_HEART
     jp z, DrawSprite8
     cp 2
     ld d, T_SPARK
@@ -2611,6 +2642,7 @@ MenuHandlers:
     dw MenuPause, MenuStatus, MenuItems, MenuItemSub, MenuBoxMsg
     dw MenuOptions, MenuSkills, MenuBeast, MenuBeastPage, MenuIntro, MenuMap
     dw MenuClass, MenuShop, MenuShopList, MenuInn, MenuDialog, MenuQuests, MenuSaveAsk, MenuAlloc
+    dw MenuGear, MenuGearSub, MenuSmith
 
 EnterMenuState:
     ld a, STATE_MENU
@@ -2712,10 +2744,16 @@ MenuPause:
     jp JumpTable
 
 PauseActions:
-    dw OpenStatus, OpenItems, OpenSkills, OpenQuests, OpenMap, OpenBestiary, OpenSaveAsk, OpenOptions
+    dw OpenStatus, OpenBag, OpenSkills, OpenQuests, OpenMap, OpenBestiary, OpenSaveAsk, OpenOptions
 
 Retire:
     jp StartTitle
+
+OpenBag:                         ; ITEMS: the gear bag tab first
+    xor a
+    ld [wGearCur], a
+    ld [wGearTop], a
+    jp OpenGearTab
 
 ; ---- status (character sheet) -------------------------------------------
 MenuBoxMsg:
@@ -3591,6 +3629,7 @@ INCLUDE "src/town.asm"
 INCLUDE "src/combat.asm"
 INCLUDE "src/quests.asm"
 INCLUDE "src/save.asm"
+INCLUDE "src/gear.asm"
 
 SECTION "Data", ROMX, BANK[1]
 
@@ -3629,7 +3668,7 @@ BounceTable: db 1, 8,  1, 120,  0, 8,  0, 136
 EnterTable:  db 1, 124, 1, 6,  0, 140, 0, 4
 
 ; ============================================================ text =========
-SECTION "Text", ROMX, BANK[1]
+SECTION "Text", ROM0
 
 
 BootList:
@@ -3650,7 +3689,7 @@ TitleList:
     TXT 3, 16, StrCredit
     db $FF
 StrTitle:    db "ARPG GB QUEST", $FF
-StrTagline:  db "VERSION 0.5.0", $FF
+StrTagline:  db "VERSION 0.6.0", $FF
 StrGoal1:    db "FIVE LANDS. FOUR", $FF
 StrGoal2:    db "SEALS. ONE OGRE.", $FF
 StrPress:    db "PRESS START", $FF
@@ -3812,6 +3851,7 @@ MsgLvUp:   db "LV UP"
 MsgHeal:   db "HEAL "
 MsgPotion: db "POT+1"
 MsgGold:   db "GOLD!"
+StrSmith2: db "", $FF
 MsgFull:   db "FULL!"
 MsgBoss:   db "BOSS!"
 StrSealed: db "THE CRYPT IS SEALED", $FF
@@ -3980,6 +4020,43 @@ wDlgPtr:       dw
 wDlgEnd:       dw
 wClassCur:     db
 wSlot:         db
+wBagTab:       db
+wGearCur:      db
+wGearTop:      db
+wGenLvl:       dw
+wGenRar:       db
+wGenSlot:      db
+wTmpSet:       db
+wInstRar:      db
+wInstLvl:      dw
+wInstUpg:      db
+wAffTarget:    db
+wCurInst:      dw
+wSmithOre:     db
+wNewItem:      ds 8
+wDropItem:     ds 8
+wGearCalc:                       ; --- recomputed by GearBonus ---
+gAcc:          ds 25 * 2
+gWpn:          dw
+gWpnFlags:     db
+gArmor:        dw
+wAspects:      ds 2
+wSetCount:     ds 8
+wPowerSum:     dw
+wPowerCnt:     db
+wPowerLvl:     dw
+wGearCalcEnd:
+wEAttr:
+wEStr:         dw
+wEDex:         dw
+wECon:         dw
+wEInt:         dw
+wEWis:         dw
+wEVit:         dw
+wESpi:         dw
+wELck:         dw
+wEWil:         dw
+wECha:         dw
 wSlotCur:      db
 wSlotMode:     db
 wQState:       ds 4
@@ -4042,6 +4119,10 @@ wWinBuf:       ds 20 * 18
 
 SECTION "Inventory RAM", WRAM0, ALIGN[5]
 wInv:          ds INV_SLOTS * 2
+
+SECTION "Gear RAM", WRAM0
+wEquip:        ds 11 * 8
+wGear:         ds 20 * 8
 
 SECTION "HRAM", HRAM
 hOAMDMA:     ds 16
