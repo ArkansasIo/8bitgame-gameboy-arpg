@@ -51,6 +51,11 @@ DEF rBCPD  EQU $FF69
 DEF rOCPS  EQU $FF6A
 DEF rOCPD  EQU $FF6B
 DEF rIE    EQU $FFFF
+DEF rROMB0 EQU $2000
+DEF rRAMG  EQU $0000
+DEF BANK_MAIN  EQU 1
+DEF BANK_ROOMS EQU 2
+DEF BANK_GFX   EQU 3
 
 ; LCD on, window map $9C00, BG tiles $9000, BG map $9800, OBJ 8x8, BG on
 DEF LCDC_ON    EQU %11000011
@@ -92,6 +97,7 @@ DEF M_SKILLS    EQU 6
 DEF M_BEAST     EQU 7
 DEF M_BEASTPAGE EQU 8
 DEF M_INTRO     EQU 9
+DEF M_MAP       EQU 10
 
 DEF DIR_DOWN   EQU 0
 DEF DIR_UP     EQU 1
@@ -108,16 +114,12 @@ DEF MAX_LEVEL    EQU 5
 DEF MAX_ITEM     EQU 9
 
 DEF ATTACK_TIME  EQU 12
-DEF MAX_ENEMIES  EQU 3
+DEF MAX_ENEMIES  EQU 4
 DEF ENEMY_SIZE   EQU 16
 DEF ROOM_W       EQU 20
 DEF ROOM_H       EQU 17
 
 DEF TYPE_NONE     EQU 0
-DEF TYPE_GOBLIN   EQU 1
-DEF TYPE_BAT      EQU 2
-DEF TYPE_SKELETON EQU 3
-DEF TYPE_OGRE     EQU 4
 
 ; monster stat block offsets (8 bytes each, SRD 5.1)
 DEF MS_AC   EQU 0
@@ -127,6 +129,15 @@ DEF MS_DN   EQU 3
 DEF MS_DS   EQU 4
 DEF MS_DB   EQU 5
 DEF MS_XP   EQU 6
+DEF MS_TILE EQU 8
+DEF MS_GOLD EQU 9
+DEF MS_FLAGS EQU 10
+DEF FLAG_TOWN EQU 1
+DEF FLAG_BOSS EQU 2
+DEF FLAG_LOCKED EQU 4
+DEF T_COIN EQU 85
+DEF T_FIREBOLT EQU 86
+DEF T_SPARK EQU 87
 
 ; sprite tile ids
 DEF T_FIGHTER_S EQU 8
@@ -171,6 +182,7 @@ DEF E_HURT  EQU 7
 DEF E_KX    EQU 8
 DEF E_KY    EQU 9
 DEF E_NOHIT EQU 10
+DEF E_PAL   EQU 11
 
 MACRO SFX_GUARD
     ld a, [wSoundOn]
@@ -180,6 +192,7 @@ ENDM
 
 ; graphics + "text" charmap (selected for the rest of the file)
 INCLUDE "gfx.inc"
+INCLUDE "world.inc"
 
 NEWCHARMAP room
 CHARMAP ".", 1
@@ -222,6 +235,10 @@ Main:
 
     xor a
     ldh [rVBK], a
+    ld a, BANK_MAIN
+    ld [rROMB0], a
+    ld a, BANK_GFX
+    ld [rROMB0], a
     ld hl, SpriteTiles
     ld de, $8000
     ld bc, SpriteTilesEnd - SpriteTiles
@@ -238,6 +255,10 @@ Main:
     ld de, $9000 + T_FRAME * 16
     ld bc, FrameTilesEnd - FrameTiles
     call Memcpy
+    ld a, BANK_MAIN
+    ld [rROMB0], a
+    xor a
+    ld [wZone], a
 
     ld hl, wShadowOAM
     ld bc, 160
@@ -449,10 +470,17 @@ NewGame:
     ld [wPlayerInv], a
     ld [wKnockT], a
     ld [wRoom], a
-    ld [wRoomsCleared], a
+    ld [wBossFlags], a
+    ld [wGold], a
+    ld [wGold + 1], a
     ld [wPickupOn], a
     ld [wMsgT], a
     ld [wSeen], a
+    ld [wSeen + 1], a
+    ld [wBeastPage], a
+    ld [wBannerT], a
+    dec a
+    ld [wLoadedZone], a
     ld [wPauseCur], a
     ld [wItemCur], a
     ld [wBeastCur], a
@@ -467,20 +495,43 @@ NewGame:
 ; ============================================================ rooms ========
 LoadRoom:
     call LCDOff
+    ld a, BANK_ROOMS             ; copy the room map out of bank 2
+    ld [rROMB0], a
     ld a, [wRoom]
     add a, a
     ld e, a
     ld d, 0
-    ld hl, RoomTable
+    ld hl, RoomMaps
     add hl, de
     ld a, [hl+]
     ld h, [hl]
     ld l, a
-    push hl
     ld de, wRoomMap
     ld bc, ROOM_W * ROOM_H
     call Memcpy
-    pop hl
+    ld a, BANK_MAIN
+    ld [rROMB0], a
+    call GetRoomInfo
+    ld de, 4
+    add hl, de
+    ld a, [hl+]
+    ld [wZone], a
+    ld a, [hl]
+    ld [wRoomFlags], a
+    xor a
+    ld [wRested], a
+    ld a, [wZone]                ; new zone: swap biome tiles + palettes
+    ld b, a
+    ld a, [wLoadedZone]
+    cp b
+    jr z, .sameZone
+    ld a, b
+    ld [wLoadedZone], a
+    call LoadBiome
+    ld a, 1
+    ld [wBannerPending], a
+.sameZone:
+    ld hl, wRoomMap
     ld de, SCRN + 32
     ld c, ROOM_H
 .row:
@@ -500,8 +551,7 @@ LoadRoom:
     dec c
     jr nz, .row
 
-    ; CGB attributes: HUD row + per-tile palettes
-    ld a, [wIsCGB]
+    ld a, [wIsCGB]               ; CGB attributes: HUD row + per-tile palettes
     and a
     jr z, .noAttr
     ld a, 1
@@ -541,27 +591,16 @@ LoadRoom:
     xor a
     ldh [rVBK], a
 .noAttr:
-
     ld hl, wEnemies
     ld bc, ENEMY_SIZE * MAX_ENEMIES
     xor a
     call Memset
     xor a
     ld [wPickupOn], a
-
+    ld [wProjOn], a
+    ; spawns: 4 per room (type, x, y, palette); monsters respawn on entry
     ld a, [wRoom]
-    call RoomBit
-    ld b, a
-    ld a, [wRoomsCleared]
-    and b
-    jr nz, .done
-
-    ld a, [wRoom]
-    ld l, a
-    add a, a
-    add a, a
-    add a, a
-    add a, l
+    swap a                       ; *16
     ld e, a
     ld d, 0
     ld hl, SpawnTable
@@ -583,24 +622,33 @@ LoadRoom:
     ld [wCur + E_X], a
     ld a, [hl+]
     ld [wCur + E_Y], a
+    ld a, [hl+]
+    ld [wCur + E_PAL], a
     push hl
     ld a, [wCur + E_TYPE]
     and a
     jr z, .empty
-    push af
-    dec a
-    call RoomBit                 ; mark as seen for the bestiary
-    ld b, a
-    ld a, [wSeen]
-    or b
-    ld [wSeen], a
-    pop af
+    cp NPC_BASE
+    jr nc, .empty
     call GetTypeStats
+    push hl
+    ld de, MS_FLAGS              ; a defeated zone boss stays dead
+    add hl, de
+    ld a, [wBossFlags]
+    and [hl]
+    pop hl
+    jr z, .alive
+    xor a
+    ld [wCur + E_TYPE], a
+    jr .empty
+.alive:
     inc hl
     ld a, [hl]                   ; MS_HP
     ld [wCur + E_HP], a
     ld a, 30
     ld [wCur + E_TIMER], a
+    ld a, [wCur + E_TYPE]
+    call MarkSeen
 .empty:
     pop hl
     pop de
@@ -612,8 +660,75 @@ LoadRoom:
     pop bc
     dec c
     jr nz, .spawn
-.done:
     jp LCDOn
+
+GetRoomInfo:                     ; hl = RoomInfo + room * 8 (clobbers de)
+    ld a, [wRoom]
+GetRoomInfoA:
+    add a, a
+    add a, a
+    add a, a
+    ld e, a
+    ld d, 0
+    ld hl, RoomInfo
+    add hl, de
+    ret
+
+MarkSeen:                        ; a = monster type -> set bestiary bit
+    dec a
+    ld c, a
+    srl a
+    srl a
+    srl a
+    ld e, a
+    ld d, 0
+    ld hl, wSeen
+    add hl, de
+    ld a, c
+    and 7
+    call RoomBit
+    or [hl]
+    ld [hl], a
+    ret
+
+IsSeen:                          ; a = index (0..) -> nz if seen
+    ld c, a
+    srl a
+    srl a
+    srl a
+    ld e, a
+    ld d, 0
+    ld hl, wSeen
+    add hl, de
+    ld a, c
+    and 7
+    call RoomBit
+    and [hl]
+    ret
+
+LoadBiome:                       ; LCD off. tiles 1-6 + palettes for wZone
+    ld a, [wZone]
+    ld l, a
+    ld h, 0
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    add hl, hl                   ; *32
+    ld d, h
+    ld e, l
+    add hl, hl                   ; *64
+    add hl, de                   ; *96
+    ld de, BiomeTiles
+    add hl, de
+    ld de, $9000 + 16
+    ld bc, 96
+    ld a, BANK_GFX
+    ld [rROMB0], a
+    call Memcpy
+    ld a, BANK_MAIN
+    ld [rROMB0], a
+    jp LoadPalettes
 
 ; a = index (0..7) -> a = 1 << index
 RoomBit:
@@ -632,31 +747,26 @@ CheckRoomClear:
     ld a, [wGameState]
     cp STATE_PLAY
     ret nz
-    ld a, [wRoom]
-    call RoomBit
-    ld b, a
-    ld a, [wRoomsCleared]
-    and b
+    ld a, [wRested]
+    and a
     ret nz
-    ld a, [wEnemies + 0 * ENEMY_SIZE]
-    ld c, a
-    ld a, [wEnemies + 1 * ENEMY_SIZE]
-    or c
-    ld c, a
-    ld a, [wEnemies + 2 * ENEMY_SIZE]
-    or c
+    ld a, [wRoomFlags]
+    and FLAG_TOWN
     ret nz
-    ld a, [wRoomsCleared]
-    or b
-    ld [wRoomsCleared], a
-    push af
-    ld a, 1                      ; short rest: Second Wind recharges
-    ld [wSecondWind], a
-    call SfxClear
-    pop af
-    cp $0F
+    ld hl, wEnemies
+    ld b, MAX_ENEMIES
+    ld de, ENEMY_SIZE
+.l:
+    ld a, [hl]
+    and a
     ret nz
-    jp ShowWin
+    add hl, de
+    dec b
+    jr nz, .l
+    ld a, 1
+    ld [wRested], a
+    ld [wSecondWind], a          ; short rest: Second Wind recharges
+    jp SfxClear
 
 ; ============================================================ player =======
 UpdatePlayer:
@@ -741,46 +851,141 @@ UpdatePlayer:
     dec a
     ld [wAttack], a
 .room:
-    ld a, [wPlayerX]
-    cp 2
-    jr c, .goLeft
-    cp 142
-    jr nc, .goRight
-    ld a, [wPlayerY]
-    cp 4
-    jr c, .goUp
-    cp 126
-    jr nc, .goDown
-    ret
-.goLeft:
-    ld a, 140
-    ld [wPlayerX], a
-    ld a, [wRoom]
+    ld a, [wBannerT]
+    and a
+    jr z, .noBanner
     dec a
-    jr .change
-.goRight:
-    ld a, 4
-    ld [wPlayerX], a
-    ld a, [wRoom]
-    inc a
-    jr .change
-.goUp:
-    ld a, 124
-    ld [wPlayerY], a
-    ld a, [wRoom]
-    sub 2
-    jr .change
-.goDown:
-    ld a, 6
-    ld [wPlayerY], a
-    ld a, [wRoom]
-    add a, 2
-.change:
+    ld [wBannerT], a
+    jr nz, .noBanner
+    xor a
+    ld [wWinOn], a
+.noBanner:
+    ld a, [wPlayerX]
+    ld b, 2
+    cp 2
+    jr c, .exit
+    ld b, 3
+    cp 142
+    jr nc, .exit
+    ld a, [wPlayerY]
+    ld b, 0
+    cp 4
+    jr c, .exit
+    ld b, 1
+    cp 126
+    ret c
+.exit:                           ; b = direction N S W E
+    push bc
+    call GetRoomInfo
+    pop bc
+    ld a, l
+    add a, b
+    ld l, a
+    jr nc, .nc
+    inc h
+.nc:
+    ld a, [hl]
+    cp 255
+    ret z
+    ld c, a                      ; target room
+    push bc
+    call GetRoomInfoA
+    ld de, 5
+    add hl, de
+    pop bc
+    ld a, [hl]
+    and FLAG_LOCKED
+    jr z, .open
+    ld a, [wBossFlags]
+    and $0F
+    cp $0F
+    jr z, .open
+    ; sealed: push the hero back and say why
+    ld a, b
+    ld hl, BounceTable
+    call PosFromTable
+    xor a
+    ld [wKnockT], a
+    ld hl, StrSealed
+    jp ShowBanner
+.open:
+    ld a, c
     ld [wRoom], a
+    ld a, b
+    ld hl, EnterTable
+    call PosFromTable
     xor a
     ld [wKnockT], a
     ld [wAttack], a
-    jp LoadRoom
+    call LoadRoom
+    ld a, [wBannerPending]
+    and a
+    ret z
+    xor a
+    ld [wBannerPending], a
+    ld a, [wZone]
+    add a, a
+    ld e, a
+    ld d, 0
+    ld hl, ZoneNames
+    add hl, de
+    ld a, [hl+]
+    ld h, [hl]
+    ld l, a
+    jp ShowBanner
+
+; a = direction, hl = table of (axis, value): axis 0 = x, 1 = y
+PosFromTable:
+    add a, a
+    add a, l
+    ld l, a
+    jr nc, .nc
+    inc h
+.nc:
+    ld a, [hl+]
+    and a
+    ld a, [hl]
+    jr nz, .y
+    ld [wPlayerX], a
+    ret
+.y:
+    ld [wPlayerY], a
+    ret
+
+; zone-name banner across the top of the screen (hl = string)
+ShowBanner:
+    push hl
+    call WinClearAll
+    ld b, 0
+    ld c, 0
+    ld d, 20
+    ld e, 3
+    call DrawBox
+    pop hl
+    push hl
+    ld b, 0                      ; centre it
+.len:
+    ld a, [hl+]
+    cp $FF
+    jr z, .got
+    inc b
+    jr .len
+.got:
+    ld a, 20
+    sub b
+    srl a
+    ld b, a
+    ld c, 1
+    pop hl
+    call WinPrint
+    ld a, 7
+    ld b, 8
+    ld c, 8 + 24
+    call SetWindow
+    call ShowFresh
+    ld a, 120
+    ld [wBannerT], a
+    ret
 
 PlayerTryMove:                   ; d = dx, e = dy; preserves de
     ld a, d
@@ -1107,8 +1312,10 @@ SetSwordRectA:
 GetTypeStats:                    ; a = type (1..) -> hl = stat block. clobbers de
     dec a
     add a, a
-    add a, a
-    add a, a
+    add a, a                     ; *4
+    ld e, a
+    add a, a                     ; *8
+    add a, e                     ; *12
     ld e, a
     ld d, 0
     ld hl, MonsterStats
@@ -1146,6 +1353,9 @@ UpdateCurEnemy:
     ld a, [wGameState]
     cp STATE_PLAY
     ret nz
+    ld a, [wCur + E_TYPE]
+    cp NPC_BASE
+    ret nc                       ; townsfolk stand still
     ld a, [wCur + E_NOHIT]
     and a
     jr z, .nh
@@ -1177,9 +1387,17 @@ UpdateCurEnemy:
     call EnemyThink
 .move:
     ld a, [wCur + E_TYPE]
-    cp TYPE_BAT
-    jr z, .doMove                ; bats: full speed
+    cp TYPE_GIANT_BAT
+    jr z, .doMove                ; bats + wolves: full speed
+    cp TYPE_WOLF
+    jr z, .doMove
+    cp TYPE_WINTER_WOLF
+    jr z, .doMove
     cp TYPE_SKELETON
+    jr z, .threeQuarter
+    cp TYPE_GNOLL
+    jr z, .threeQuarter
+    cp TYPE_LIZARDFOLK
     jr z, .threeQuarter
     ldh a, [hFrame]              ; goblins + ogre: half speed
     and 1
@@ -1281,18 +1499,59 @@ UpdateCurEnemy:
 .kill:
     ld a, [wCur + E_TYPE]
     call GetTypeStats
+    push hl
     ld de, MS_XP
     add hl, de
     ld a, [hl+]
     ld e, a
     ld d, [hl]
     call AddXP
+    pop hl
+    push hl
+    ld de, MS_FLAGS
+    add hl, de
+    ld a, [hl]
+    and a
+    jr z, .notBoss
+    bit 7, a
+    jr z, .zoneBoss
+    pop hl                       ; the Ogre falls: victory
+    xor a
+    ld [wCur + E_TYPE], a
+    call SfxKill
+    jp ShowWin
+.zoneBoss:
+    ld b, a
+    ld a, [wBossFlags]
+    or b
+    ld [wBossFlags], a
+    ld hl, MsgBoss
+    call SetMsg
+.notBoss:
+    pop hl
     ld a, [wPickupOn]
     and a
     jr nz, .noDrop
+    ld de, MS_GOLD
+    add hl, de
+    ld a, [hl]
+    and a
+    jr z, .heartRoll
+    ld c, a                      ; gold die
     call Rand
     and 1
+    jr z, .heartRoll
+    call RollDie
+    ld [wPickupAmt], a
+    ld a, 1
+    jr .drop
+.heartRoll:
+    call Rand
+    and 3
     jr nz, .noDrop
+    xor a
+.drop:
+    ld [wPickupType], a
     ld a, 1
     ld [wPickupOn], a
     ld a, [wCur + E_X]
@@ -1350,8 +1609,10 @@ EnemyTryMove:                    ; d = dx, e = dy; preserves de
 
 EnemyThink:
     ld a, [wCur + E_TYPE]
-    cp TYPE_BAT
+    cp TYPE_GIANT_BAT
     jr z, .bat
+    cp TYPE_GIANT_FROG
+    jr z, .bat                   ; frogs hop about erratically too
     cp TYPE_GOBLIN
     jr nz, .hunter
     ; goblin: chase along the longer axis, sometimes skulk about
@@ -1468,6 +1729,15 @@ UpdatePickup:
     ret nc
     xor a
     ld [wPickupOn], a
+    ld a, [wPickupType]
+    and a
+    jr z, .heart
+    ld a, [wPickupAmt]           ; coins
+    call AddGold
+    ld hl, MsgGold
+    call SetMsg
+    jp SfxPickup
+.heart:
     ld a, [wMaxHP]
     ld b, a
     ld a, [wHP]
@@ -1516,7 +1786,14 @@ DrawSprites:
     call DrawPlayer
     call DrawSword
     call DrawEnemies
-    jp DrawPickup
+    call DrawPickup
+    ld a, [wGameState]
+    cp STATE_PLAY
+    ret nz
+    ld a, [wBannerT]             ; keep sprites off the zone banner
+    and a
+    ret z
+    jp HideSpritesUnderWindow
 
 DrawPlayer:
     ld a, [wPlayerInv]
@@ -1595,51 +1872,66 @@ DrawEnemies:
 .loop:
     push bc
     push hl
-    ld a, [hl+]
+    ld a, [hl]
     and a
-    jr z, .next
+    jp z, .next
     ld [wTmp], a
+    inc hl
     ld a, [hl+]
     ld b, a
     ld a, [hl+]
     ld c, a
-    inc hl
-    inc hl
-    inc hl
-    inc hl
+    ld de, E_HURT - E_HP
+    add hl, de
     ld a, [hl]                   ; E_HURT
     and 2
     ld [wTmp + 1], a
+    ld de, E_PAL - E_HURT
+    add hl, de
+    ld a, [hl]
+    ld e, a                      ; palette
     ld a, [wTmp]
-    cp TYPE_GOBLIN
-    jr nz, .notGoblin
-    ld d, T_GOBLIN
-    ld e, OP_GOBLIN
-    ldh a, [hFrame]
-    and 16
-    jr z, .draw
-    ld d, T_GOBLIN + 4
-    jr .draw
-.notGoblin:
-    cp TYPE_BAT
-    jr nz, .notBat
-    ld d, T_BAT
-    ld e, OP_BAT
+    cp NPC_BASE
+    jr c, .monster
+    sub NPC_BASE
+    push hl
+    ld hl, NpcTiles
+    add a, l
+    ld l, a
+    jr nc, .nn
+    inc h
+.nn:
+    ld d, [hl]
+    pop hl
+    jr .anim
+.monster:
+    push bc
+    push de
+    call GetTypeStats
+    ld de, MS_TILE
+    add hl, de
+    pop de
+    pop bc
+    ld d, [hl]
+    ld a, [wTmp]
+    cp TYPE_GOBLIN               ; two-frame sprites
+    jr z, .twoFrame16
+    cp TYPE_GIANT_BAT
+    jr nz, .anim
     ldh a, [hFrame]
     and 8
     jr z, .draw
-    ld d, T_BAT + 4
+    jr .frame2
+.twoFrame16:
+    ldh a, [hFrame]
+    and 16
+    jr z, .draw
+.frame2:
+    ld a, d
+    add a, 4
+    ld d, a
     jr .draw
-.notBat:
-    cp TYPE_SKELETON
-    jr nz, .ogre
-    ld d, T_SKELETON
-    ld e, OP_SKELETON
-    jr .rattle
-.ogre:
-    ld d, T_OGRE
-    ld e, OP_OGRE
-.rattle:
+.anim:                           ; everyone else: mirror to walk
     ldh a, [hFrame]
     and 16
     jr z, .draw
@@ -1662,7 +1954,7 @@ DrawEnemies:
     add hl, de
     pop bc
     dec c
-    jr nz, .loop
+    jp nz, .loop
     ret
 
 DrawPickup:
@@ -1682,7 +1974,34 @@ DrawPickup:
 .nb:
     ld d, T_HEART_PU
     ld e, OP_HEART
+    ld a, [wPickupType]
+    and a
+    jp z, DrawSprite8
+    ld d, T_COIN
+    ld e, OP_SWORD
     jp DrawSprite8
+
+AddGold:                         ; a = amount, capped at 999
+    ld hl, wGold
+    add a, [hl]
+    ld [hl+], a
+    ld a, [hl]
+    adc a, 0
+    ld [hl], a
+    ld a, [wGold + 1]
+    cp HIGH(1000)
+    jr c, .ok
+    jr nz, .cap
+    ld a, [wGold]
+    cp LOW(1000)
+    ret c
+.cap:
+    ld a, LOW(999)
+    ld [wGold], a
+    ld a, HIGH(999)
+    ld [wGold + 1], a
+.ok:
+    ret
 
 DrawTitleSprites:
     call ClearOAM
@@ -1869,19 +2188,19 @@ BuildHUD:
     ld [hl+], a
     ld a, e
     ld [hl+], a
-    ld hl, wHudBuf + 8
-    ld a, [wRoomsCleared]
-    ld b, a
-    ld c, 4
-.room:
-    srl b
-    ld a, T_BOX_F
-    jr c, .wr
-    ld a, T_BOX_E
-.wr:
-    ld [hl+], a
-    dec c
-    jr nz, .room
+    ld a, [wGold]                ; G999
+    ld e, a
+    ld a, [wGold + 1]
+    ld d, a
+    call Num16ToStr
+    ld a, "G"
+    ld [wHudBuf + 8], a
+    ld a, [wNumBuf + 1]
+    ld [wHudBuf + 9], a
+    ld a, [wNumBuf + 2]
+    ld [wHudBuf + 10], a
+    ld a, [wNumBuf + 3]
+    ld [wHudBuf + 11], a
     ld a, [wMsgT]
     and a
     jr z, .lvl
@@ -1974,8 +2293,8 @@ Num16ToStr:
     ld [hl+], a
     ret
 
-CountCleared:                    ; a = number of cleared rooms
-    ld a, [wRoomsCleared]
+CountCleared:                    ; a = zone bosses defeated
+    ld a, [wBossFlags]
     ld b, a
     ld c, 4
     xor a
@@ -2258,7 +2577,7 @@ UpdateMenu:
 
 MenuHandlers:
     dw MenuPause, MenuStatus, MenuItems, MenuItemSub, MenuBoxMsg
-    dw MenuOptions, MenuSkills, MenuBeast, MenuBeastPage, MenuIntro
+    dw MenuOptions, MenuSkills, MenuBeast, MenuBeastPage, MenuIntro, MenuMap
 
 EnterMenuState:
     ld a, STATE_MENU
@@ -2360,7 +2679,7 @@ MenuPause:
     jp JumpTable
 
 PauseActions:
-    dw OpenStatus, OpenItems, OpenSkills, OpenBestiary, OpenOptions, Retire, CloseMenu
+    dw OpenStatus, OpenItems, OpenSkills, OpenMap, OpenBestiary, OpenOptions, Retire
 
 Retire:
     jp StartTitle
@@ -2421,7 +2740,7 @@ OpenStatus:
     call WinPrint
     call CountCleared
     add a, T_DIGIT0
-    ld b, 8
+    ld b, 9
     ld c, 16
     call WinPutTile
     ld a, [wSecondWind]
@@ -2802,65 +3121,77 @@ MenuSkills:
     ld bc, BackToSkills
     jp ShowBoxMsg
 
-; ---- bestiary ------------------------------------------------------------
+; ---- bestiary (7 per page, 2 pages) -------------------------------------
 OpenBestiary:
     ld a, M_BEAST
     ld [wMenu], a
     call WinClearAll
     ld b, 0
     ld c, 0
-    ld d, 18
-    ld e, 12
+    ld d, 20
+    ld e, 18
     call DrawBox
-    ld c, 0                      ; list monster names (????? if unseen)
-.names:
-    push bc
-    ld a, c
-    call RoomBit
+    ld a, [wBeastPage]           ; first index on this page = page * 7
     ld b, a
-    ld a, [wSeen]
-    and b
-    pop bc
-    push bc
+    add a, a
+    add a, a
+    add a, a
+    sub b
+    ld [wTmp], a
+    xor a
+    ld [wTmp + 1], a             ; row counter
+.names:
+    ld a, [wTmp]
+    cp NUM_MONSTERS
+    jr nc, .done
+    call IsSeen
     ld hl, StrUnknown
     jr z, .print
-    ld a, c
+    ld a, [wTmp]
     add a, a
     ld e, a
     ld d, 0
-    ld hl, BeastNames
+    ld hl, MonsterNames
     add hl, de
     ld a, [hl+]
     ld h, [hl]
     ld l, a
 .print:
-    ld a, c
+    ld a, [wTmp + 1]
     add a, a
     add a, 2
     ld c, a
     ld b, 2
     call WinPrint
-    pop bc
-    inc c
-    ld a, c
-    cp 4
-    jr nz, .names
-    ld hl, StrCancel
+    ld hl, wTmp
+    inc [hl]
+    inc hl
+    inc [hl]
+    ld a, [hl]
+    cp 7
+    jr c, .names
+.done:
+    ld hl, StrPage
     ld b, 2
-    ld c, 10
+    ld c, 16
     call WinPrint
+    ld a, [wBeastPage]
+    add a, T_DIGIT0 + 1
+    ld b, 7
+    ld c, 16
+    call WinPutTile
     call BeastCursor
-    ld a, 2 * 8 + 7
-    ld b, 16
-    ld c, 16 + 12 * 8
+    ld a, 7
+    ld b, 0
+    ld c, 144
     call SetWindow
     call ShowFresh
-    jp ReshowSprites
+    jp ClearOAM
 
 BeastCursor:
     ld b, 1
     ld c, 2
-    ld d, 5
+    ld d, 7
     ld a, [wBeastCur]
     ld e, a
     ld a, T_CUR
@@ -2868,31 +3199,43 @@ BeastCursor:
 
 MenuBeast:
     ld hl, wBeastCur
-    ld b, 5
+    ld b, 7
     call ListNav
     jp c, BeastCursor
     ldh a, [hNewKeys]
+    ld b, a
+    and $30                      ; left / right: flip page
+    jr z, .noPage
+    ld a, [wBeastPage]
+    xor 1
+    ld [wBeastPage], a
+    call SfxMenu
+    jp OpenBestiary
+.noPage:
+    ld a, b
     and PAD_B
     jr z, .notB
     call SfxMenu
     jp ReturnToPause
 .notB:
-    ldh a, [hNewKeys]
+    ld a, b
     and PAD_A
     ret z
-    ld a, [wBeastCur]
-    cp 4
-    jr nz, .entry
-    call SfxMenu
-    jp ReturnToPause
-.entry:
-    call RoomBit
+    ld a, [wBeastPage]
     ld b, a
-    ld a, [wSeen]
-    and b
+    add a, a
+    add a, a
+    add a, a
+    sub b
+    ld b, a
+    ld a, [wBeastCur]
+    add a, b
+    cp NUM_MONSTERS
+    jp nc, SfxBlock
+    ld [wTmp], a
+    call IsSeen
     jp z, SfxBlock               ; not encountered yet
     call SfxMenu
-    ; full-page monster entry (SRD 5.1 stat block + lore)
     ld a, M_BEASTPAGE
     ld [wMenu], a
     call WinClearAll
@@ -2901,7 +3244,7 @@ MenuBeast:
     ld d, 20
     ld e, 18
     call DrawBox
-    ld a, [wBeastCur]
+    ld a, [wTmp]
     add a, a
     ld e, a
     ld d, 0
@@ -2913,12 +3256,7 @@ MenuBeast:
     call WinPrintList
     ld hl, BeastFooter
     call WinPrintList
-    ld a, 7
-    ld b, 0
-    ld c, 144
-    call SetWindow
-    call ShowFresh
-    jp ClearOAM
+    jp ShowFresh
 
 MenuBeastPage:
     ldh a, [hNewKeys]
@@ -2926,6 +3264,93 @@ MenuBeastPage:
     ret z
     call SfxMenu
     jp OpenBestiary
+
+; ---- world map -------------------------------------------------------------
+OpenMap:
+    ld a, M_MAP
+    ld [wMenu], a
+    call WinClearAll
+    ld b, 0
+    ld c, 0
+    ld d, 20
+    ld e, 18
+    call DrawBox
+    ld hl, StrWorldMap
+    ld b, 5
+    ld c, 1
+    call WinPrint
+    xor a
+    ld [wTmp], a
+.cell:
+    ld a, [wTmp]
+    call GetRoomInfoA            ; hl -> N S W E zone flags x y
+    ld de, 5
+    add hl, de
+    ld a, [hl]
+    ld [wTmp + 1], a             ; flags
+    ld a, [wTmp]
+    add a, a
+    ld e, a
+    ld d, 0
+    ld hl, MapCells
+    add hl, de
+    ld b, [hl]
+    inc hl
+    ld c, [hl]
+    ld a, [wTmp + 1]
+    and FLAG_TOWN
+    ld a, "*"
+    jr nz, .put
+    ld a, [wTmp + 1]
+    and FLAG_LOCKED
+    ld a, "?"
+    jr nz, .put
+    ld a, T_BOX_E
+.put:
+    push af
+    ld a, [wRoom]
+    ld e, a
+    ld a, [wTmp]
+    cp e
+    jr nz, .notHere
+    pop af
+    ld a, T_CUR
+    push af
+.notHere:
+    pop af
+    call WinPutTile
+    ld hl, wTmp
+    inc [hl]
+    ld a, [hl]
+    cp NUM_ROOMS
+    jr c, .cell
+    ld hl, MapLabels
+    call WinPrintList
+    ld a, [wZone]                ; current zone name at the bottom
+    add a, a
+    ld e, a
+    ld d, 0
+    ld hl, ZoneNames
+    add hl, de
+    ld a, [hl+]
+    ld h, [hl]
+    ld l, a
+    ld b, 2
+    ld c, 16
+    call WinPrint
+    ld a, 7
+    ld b, 0
+    ld c, 144
+    call SetWindow
+    call ShowFresh
+    jp ClearOAM
+
+MenuMap:
+    ldh a, [hNewKeys]
+    and PAD_A | PAD_B | PAD_START
+    ret z
+    call SfxMenu
+    jp ReturnToPause
 
 ; ---- options -------------------------------------------------------------
 OpenOptions:
@@ -3093,7 +3518,14 @@ LoadPalettes:                    ; LCD must be off
     ld a, [wIsCGB]
     and a
     ret z
-    ld a, [wPalSet]
+    ld a, [wPalSet]              ; COLOR -> zone set, GREEN/GRAY -> sets 6/7
+    and a
+    jr nz, .mono
+    ld a, [wZone]
+    jr .set
+.mono:
+    add a, 5
+.set:
     ld l, a
     ld h, 0
     add hl, hl
@@ -3105,6 +3537,8 @@ LoadPalettes:                    ; LCD must be off
     add hl, hl                   ; *128
     ld de, CgbPalettes
     add hl, de
+    ld a, BANK_GFX
+    ld [rROMB0], a
     ld a, $80
     ldh [rBCPS], a
     ld c, 64
@@ -3121,6 +3555,8 @@ LoadPalettes:                    ; LCD must be off
     ldh [rOCPD], a
     dec c
     jr nz, .ob
+    ld a, BANK_MAIN
+    ld [rROMB0], a
     ret
 
 ; ============================================================ sound ========
@@ -3520,24 +3956,12 @@ Copy1bpp:
     ret
 
 ; ============================================================ data =========
-SECTION "Data", ROM0
+SECTION "Data", ROMX, BANK[1]
 
 BitTable:   db 1, 2, 4, 8, 16, 32, 64, 128
 
 ; CGB BG palette per room tile id
 AttrTable:  db 0, 0, 0, 1, 2, 3, 4, 5, 5, 5, 5
-
-; ---- SRD 5.1 monster stat blocks --------------------------------------
-;            AC  HP  ATK  dice  sides bonus  XP
-MonsterStats:
-    db 15,  7,  4,   1,    6,    2
-    dw 50                        ; GOBLIN       CR 1/4
-    db 13, 22,  4,   1,    6,    2
-    dw 50                        ; GIANT BAT    CR 1/4
-    db 13, 13,  4,   1,    6,    2
-    dw 50                        ; SKELETON     CR 1/4
-    db 11, 59,  6,   2,    8,    4
-    dw 450                       ; OGRE         CR 2
 
 ; XP needed to reach level 2, 3, 4, 5 (5e advancement table)
 LevelTable: dw 300, 900, 2700, 6500
@@ -3560,95 +3984,16 @@ SwordSprites:
     db -6, 8, T_SWORD_HT, OP_SWORD | OAM_XFLIP,  2, 8,  T_SWORD_HH, OP_SWORD | OAM_XFLIP
     db 14, 8, T_SWORD_HH, OP_SWORD,              22, 8, T_SWORD_HT, OP_SWORD
 
-SpawnTable:
-    db TYPE_GOBLIN, 120, 24,     TYPE_GOBLIN, 40, 96,     TYPE_NONE, 0, 0
-    db TYPE_BAT, 64, 40,         TYPE_BAT, 120, 88,       TYPE_GOBLIN, 40, 104
-    db TYPE_GOBLIN, 104, 24,     TYPE_SKELETON, 56, 88,   TYPE_GOBLIN, 120, 104
-    db TYPE_OGRE, 72, 56,        TYPE_SKELETON, 32, 24,   TYPE_SKELETON, 120, 96
-
 PalCols:  db 1, 8, 14
 OptSpots: db 1, 4,  8, 4,  14, 4,  1, 9,  8, 9,  1, 12
 
-RoomTable:
-    dw Room0, Room1, Room2, Room3
-
-SETCHARMAP room
-Room0:  ; entrance hall
-    db "####################"
-    db "#,,......TT.......,#"
-    db "#,.......TT........#"
-    db "#....o.............#"
-    db "#..........,,......#"
-    db "#...TT.....,....o..#"
-    db "#...TT.............#"
-    db "#..................."
-    db "#..,......,........."
-    db "#..................."
-    db "#.......~~~~.......#"
-    db "#..o....~~~~...TT..#"
-    db "#..............TT..#"
-    db "#.,,..............,#"
-    db "#..TT.........o....#"
-    db "#..TT..............#"
-    db "########....########"
-Room1:  ; bat roost
-    db "####################"
-    db "#~~~~..........,,..#"
-    db "#~~~~...o..........#"
-    db "#~~.........TT.....#"
-    db "#...........TT..o..#"
-    db "#..,...............#"
-    db "#......o.....,.....#"
-    db "...................#"
-    db ".........,.........#"
-    db "...............TT..#"
-    db "#...TT.........TT..#"
-    db "#...TT.....o.......#"
-    db "#..................#"
-    db "#.......,,.....~~~~#"
-    db "#..o............~~~#"
-    db "#..................#"
-    db "########....########"
-Room2:  ; goblin den
-    db "########....########"
-    db "#..................#"
-    db "#..TT..........o...#"
-    db "#..TT..............#"
-    db "#.......,,.........#"
-    db "#..o...........TT..#"
-    db "#..............TT..#"
-    db "#..................."
-    db "#....~~~~..........."
-    db "#....~~~~....o......"
-    db "#..................#"
-    db "#..,,.......TT.....#"
-    db "#...........TT.....#"
-    db "#..o...............#"
-    db "#.........,....o...#"
-    db "#,,................#"
-    db "####################"
-Room3:  ; the ogre's crypt
-    db "########....########"
-    db "#..................#"
-    db "#.o..............o.#"
-    db "#..................#"
-    db "#....TT......TT....#"
-    db "#....TT......TT....#"
-    db "#..................#"
-    db "...................#"
-    db "..........,........#"
-    db "...................#"
-    db "#..................#"
-    db "#....TT......TT....#"
-    db "#....TT......TT....#"
-    db "#..................#"
-    db "#.o..............o.#"
-    db "#..................#"
-    db "####################"
 SETCHARMAP text
 
+BounceTable: db 1, 8,  1, 120,  0, 8,  0, 136
+EnterTable:  db 1, 124, 1, 6,  0, 140, 0, 4
+
 ; ============================================================ text =========
-SECTION "Text", ROM0
+SECTION "Text", ROMX, BANK[1]
 
 MACRO TXT                        ; TXT col, row, label
     db \1, \2
@@ -3665,8 +4010,8 @@ TitleList:
     db $FF
 StrTitle:    db "DUNGEON QUEST", $FF
 StrTagline:  db "A 5E ADVENTURE", $FF
-StrGoal1:    db "SLAY THE OGRE OF", $FF
-StrGoal2:    db "THE OLD CRYPT", $FF
+StrGoal1:    db "FIVE LANDS. FOUR", $FF
+StrGoal2:    db "SEALS. ONE OGRE.", $FF
 StrPress:    db "PRESS START", $FF
 StrCredit:   db "RULES: SRD 5.1", $FF
 
@@ -3692,17 +4037,17 @@ Intro6:  db "THE OLD CRYPT AND", $FF
 Intro7:  db "ITS DEAD WALK.", $FF
 Intro8:  db "ROLAND, FIGHTER", $FF
 Intro9:  db "OF THE WATCH...", $FF
-Intro10: db "CLEAR ALL 4 HALLS", $FF
+Intro10: db "BREAK THE 4 SEALS", $FF
 StrPressA: db "PRESS A", $FF
 
 PauseList:
     TXT 2, 2, StrStatus
     TXT 2, 4, StrItems
     TXT 2, 6, StrSkills
-    TXT 2, 8, StrBestiary
-    TXT 2, 10, StrOptions
-    TXT 2, 12, StrRetire
-    TXT 2, 14, StrExit
+    TXT 2, 8, StrMap
+    TXT 2, 10, StrBestiary
+    TXT 2, 12, StrOptions
+    TXT 2, 14, StrRetire
     db $FF
 StrStatus:   db "STATUS", $FF
 StrItems:    db "ITEMS", $FF
@@ -3710,7 +4055,9 @@ StrSkills:   db "SKILLS", $FF
 StrBestiary: db "BESTIARY", $FF
 StrOptions:  db "OPTIONS", $FF
 StrRetire:   db "RETIRE", $FF
-StrExit:     db "EXIT", $FF
+StrMap:      db "MAP", $FF
+StrWorldMap: db "WORLD MAP", $FF
+StrPage:     db "PAGE  /2", $FF
 
 StatusList:
     TXT 2, 2, StrName
@@ -3744,7 +4091,7 @@ StrAbil3:   db "WIS 12  CHA 10", $FF
 StrProf:    db "PROF +2  ATK +4", $FF
 StrWeapon:  db "LONGSWORD 1D8+2", $FF
 StrWind:    db "SECOND WIND  /1", $FF
-StrRooms:   db "ROOMS  /4", $FF
+StrRooms:   db "BOSSES  /4", $FF
 
 ItemList:
     TXT 2, 2, StrPotion
@@ -3818,96 +4165,22 @@ MsgBlock:  db "BLOCK"
 MsgLvUp:   db "LV UP"
 MsgHeal:   db "HEAL "
 MsgPotion: db "POT+1"
+MsgGold:   db "GOLD!"
+MsgBoss:   db "BOSS!"
+StrSealed: db "THE CRYPT IS SEALED", $FF
 
-; ---- bestiary (stats: SRD 5.1, CC-BY-4.0; lore: original) --------------
-BeastNames: dw StrGoblin, StrBat, StrSkeleton, StrOgre
-StrGoblin:   db "GOBLIN", $FF
-StrBat:      db "GIANT BAT", $FF
-StrSkeleton: db "SKELETON", $FF
-StrOgre:     db "OGRE", $FF
-
-BeastPages: dw PageGoblin, PageBat, PageSkeleton, PageOgre
-
-PageGoblin:
-    TXT 2, 2, StrGoblin
-    TXT 2, 3, BGob1
-    TXT 2, 5, BGob2
-    TXT 2, 6, BGob3
-    TXT 2, 8, BGob4
-    TXT 2, 9, BGob5
-    TXT 2, 11, BGob6
-    TXT 2, 12, BGob7
-    TXT 2, 13, BGob8
+MapLabels:
+    TXT 9, 2, MapN
+    TXT 5, 15, MapS
+    TXT 1, 8, MapW
+    TXT 15, 8, MapE
+    TXT 12, 14, MapC
     db $FF
-BGob1: db "SMALL HUMANOID", $FF
-BGob2: db "AC 15   HP 7", $FF
-BGob3: db "CR 1/4  XP 50", $FF
-BGob4: db "SCIMITAR  +4", $FF
-BGob5: db "1D6+2 SLASHING", $FF
-BGob6: db "CRUEL RAIDERS WHO", $FF
-BGob7: db "STRIKE IN PACKS", $FF
-BGob8: db "FROM THE DARK.", $FF
-
-PageBat:
-    TXT 2, 2, StrBat
-    TXT 2, 3, BBat1
-    TXT 2, 5, BBat2
-    TXT 2, 6, BBat3
-    TXT 2, 8, BBat4
-    TXT 2, 9, BBat5
-    TXT 2, 11, BBat6
-    TXT 2, 12, BBat7
-    TXT 2, 13, BBat8
-    db $FF
-BBat1: db "LARGE BEAST", $FF
-BBat2: db "AC 13   HP 22", $FF
-BBat3: db "CR 1/4  XP 50", $FF
-BBat4: db "BITE  +4", $FF
-BBat5: db "1D6+2 PIERCING", $FF
-BBat6: db "IT HUNTS BY SOUND", $FF
-BBat7: db "AND NEVER SITS", $FF
-BBat8: db "STILL.", $FF
-
-PageSkeleton:
-    TXT 2, 2, StrSkeleton
-    TXT 2, 3, BSk1
-    TXT 2, 5, BSk2
-    TXT 2, 6, BSk3
-    TXT 2, 8, BSk4
-    TXT 2, 9, BSk5
-    TXT 2, 11, BSk6
-    TXT 2, 12, BSk7
-    TXT 2, 13, BSk8
-    db $FF
-BSk1: db "MEDIUM UNDEAD", $FF
-BSk2: db "AC 13   HP 13", $FF
-BSk3: db "CR 1/4  XP 50", $FF
-BSk4: db "SHORTSWORD  +4", $FF
-BSk5: db "1D6+2 PIERCING", $FF
-BSk6: db "OLD GUARDS OF THE", $FF
-BSk7: db "CRYPT, RAISED BY", $FF
-BSk8: db "DARK MAGIC.", $FF
-
-PageOgre:
-    TXT 2, 2, StrOgre
-    TXT 2, 3, BOg1
-    TXT 2, 5, BOg2
-    TXT 2, 6, BOg3
-    TXT 2, 8, BOg4
-    TXT 2, 9, BOg5
-    TXT 2, 11, BOg6
-    TXT 2, 12, BOg7
-    TXT 2, 13, BOg8
-    db $FF
-BOg1: db "LARGE GIANT", $FF
-BOg2: db "AC 11   HP 59", $FF
-BOg3: db "CR 2    XP 450", $FF
-BOg4: db "GREATCLUB  +6", $FF
-BOg5: db "2D8+4 BLUDGEONING", $FF
-BOg6: db "A HULKING BRUTE", $FF
-BOg7: db "WHO CRAVES GOLD", $FF
-BOg8: db "AND WARM MEALS.", $FF
-
+MapN: db "ICE", $FF
+MapS: db "MIRE", $FF
+MapW: db "WOOD", $FF
+MapE: db "DUNE", $FF
+MapC: db "CRYPT", $FF
 BeastFooter:
     TXT 2, 16, StrBack
     db $FF
@@ -3939,8 +4212,19 @@ wWasCrit:      db
 wMsgT:         db
 wMsgPtr:       dw
 wRoom:         db
-wRoomsCleared: db
-wSeen:         db
+wSeen:         ds 2
+wZone:         db
+wLoadedZone:   db
+wRoomFlags:    db
+wBossFlags:    db
+wGold:         dw
+wRested:       db
+wBannerT:      db
+wBannerPending: db
+wPickupType:   db
+wPickupAmt:    db
+wProjOn:       db
+wBeastPage:    db
 wPickupOn:     db
 wPickupX:      db
 wPickupY:      db

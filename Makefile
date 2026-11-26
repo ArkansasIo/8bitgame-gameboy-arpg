@@ -4,7 +4,7 @@ ROM = dungeon_quest.gb
 $(ROM): game.asm gfx.inc
 	rgbasm -Wall -o game.o game.asm
 	rgblink -n game.sym -m game.map -o $(ROM) game.o
-	rgbfix -v -c -p 0xFF -t "DUNGEONQUEST" $(ROM)
+	rgbfix -v -c -m 0x1B -r 2 -p 0xFF -t "DUNGEONQUEST" $(ROM)
 
 gfx.inc: gen_gfx.py
 	python3 gen_gfx.py
