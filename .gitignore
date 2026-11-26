@@ -1,0 +1,5 @@
+game.o
+game.sym
+game.map
+shots/
+__pycache__/
