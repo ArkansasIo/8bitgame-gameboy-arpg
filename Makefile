@@ -1,12 +1,12 @@
 # Requires RGBDS 0.9+ (https://rgbds.gbdev.io) and Python 3
 ROM = arpg_gb_quest.gb
-VERSION = 0.6.0
+VERSION = 0.7.0
 BUILD = 20261126
 
 $(ROM): game.asm gfx.inc world.inc data.inc $(wildcard src/*.asm)
 	rgbasm -Wall -o game.o game.asm
 	rgblink -n game.sym -m game.map -o $(ROM) game.o
-	rgbfix -v -c -m 0x1B -r 2 -n 7 -p 0xFF -t "ARPGGBQUEST" $(ROM)
+	rgbfix -v -c -m 0x1B -r 2 -n 8 -p 0xFF -t "ARPGGBQUEST" $(ROM)
 	@echo "ARPG GB QUEST v$(VERSION) build $(BUILD): $$(wc -c < $(ROM)) bytes"
 
 gfx.inc: gen_gfx.py

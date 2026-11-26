@@ -1,6 +1,6 @@
 # Uniques/aspects, set bonus, smith upgrade.
 exec(open("tests/test_gear.py").read().split("run(600)")[0])
-run(600); tap("start", 40); tap("a", 40); tap("a", 30)      # fighter
+run(600); tap("start", 40); tap("a", 30); tap("a", 40); tap("a", 30)      # fighter
 atk0, arm0 = w("wATK"), w("wDEF")
 # equip EMBERHEART (unique 0: longsword, legendary, aspect EMBERS) at ilvl 100, +0
 for k, v in enumerate([3, 4, 100, 0, 0, 11, 16, 0x40]): setm("wEquip", v, k)

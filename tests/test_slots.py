@@ -21,7 +21,7 @@ def shot(name):
     pb.screen.image.convert("RGB").resize((320, 288), 0).save(f"shots/sl_{name}.png")
 run(330); shot("0_boot_logo")
 run(260); shot("1_title")
-tap("start", 20); shot("2_loading"); run(40); tap("down"); tap("down"); tap("a", 40); tap("a", 30)  # wizard
+tap("start", 20); shot("2_loading"); run(40); tap("a", 30); tap("down"); tap("down"); tap("a", 40); tap("a", 30)  # wizard
 setm("wGold", 77)
 setm("wPauseCur", 6); tap("start", 20); tap("a", 30); shot("3_save_slots")
 tap("down"); tap("down"); tap("a", 40); shot("4_saved_slot3"); tap("a", 20)

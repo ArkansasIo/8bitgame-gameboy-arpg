@@ -938,9 +938,6 @@ PickupGear:                      ; hero walked over a gear drop
     call SetMsg
     jp SfxPickup
 
-; starting kit per class: main-hand base, chest base
-ClassKit: db 2, 23,  1, 22,  7, 21,  5, 23     ; longsword/hauberk, shortsword/jerkin, staff/robe, mace/hauberk
-
 GiveStartingGear:
     ld hl, wEquip
     ld bc, NUM_GEAR_SLOTS * INST
@@ -951,9 +948,8 @@ GiveStartingGear:
     xor a
     call Memset
     ld a, [wClass]
-    add a, a
-    ld hl, ClassKit
-    call AddHLA
+    call GetClassRow
+    inc hl                       ; kit: main-hand base, chest base
     ld a, [hl+]
     inc a
     ld [wEquip], a               ; main hand

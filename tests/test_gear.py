@@ -18,7 +18,7 @@ def tap(b, f=14):
 def shot(name):
     pb.screen.image.convert("RGB").resize((320, 288), 0).save(f"shots/g_{name}.png")
 def inst(base, i): return [m(base, i * 8 + k) for k in range(8)]
-run(600); tap("start", 40); tap("a", 40); tap("a", 30)      # fighter
+run(600); tap("start", 40); tap("a", 30); tap("a", 40); tap("a", 30)      # fighter
 print("worn main", inst("wEquip", 0), "chest", inst("wEquip", 3), "ATK", w("wATK"), "ARM", w("wDEF"), "PWR", w("wPowerLvl"))
 # forest, huge luck -> gear drops; invulnerable bot collects
 setw("wLck", 6000); setw("wHP", 9999); setw("wMaxHP", 9999)

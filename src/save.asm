@@ -4,14 +4,14 @@
 SECTION "Save", ROM0
 
 DEF SRAM_BASE EQU $A000
-DEF SAVE_VERSION EQU 4
+DEF SAVE_VERSION EQU 5
 
 ; persistent RAM blocks: dw address, db length
 SaveMap:
     dw wLevel
     db 34
     dw wClass
-    db 13
+    db 14
     dw wCharge1
     db 2
     dw wRoom
@@ -236,6 +236,7 @@ ContinueGame:
     ld a, $FF
     ld [wLoadedZone], a
     call ClearEffects
+    call SetClassArch
     call RecalcStats
     call LoadClassGfx
     call RecalcStats
@@ -312,7 +313,10 @@ DrawSlots:
     call SramOff
     push bc
     ld a, [wTmp]
-    and 3
+    cp NUM_CLASSES
+    jr c, .clsOk
+    xor a
+.clsOk:
     add a, a
     ld e, a
     ld d, 0

@@ -111,23 +111,77 @@ StrSkillD6b: db "FOR 8 SECONDS.", $FF
 StrSkill7: db "GUIDING BOLT", $FF
 StrSkillD7a: db "MAG X3 RADIANT", $FF
 StrSkillD7b: db "TO NEAREST FOE.", $FF
-; STR DEX CON INT WIS HD weapon armor castmod skill1 skill2 baction pad*4
+DEF NUM_CLASSES EQU 18
+DEF NUM_RACES EQU 9
+; arch kitMain kitChest skill1 skill2 baction castmod pad*9
 ClassTable:
-    db 2, 1, 2, 255, 1, 10, 8, 13, 0, 1, 2, 0, 0, 0, 0, 0
-    db 0, 2, 2, 1, 1, 8, 5, 11, 0, 3, 4, 3, 0, 0, 0, 0
-    db 255, 2, 1, 2, 1, 6, 7, 0, 2, 5, 6, 1, 0, 0, 0, 0
-    db 2, 1, 1, 0, 2, 8, 6, 13, 2, 7, 8, 2, 0, 0, 0, 0
+    db 0, 2, 23, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 1, 1, 22, 3, 4, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 2, 7, 21, 5, 6, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 3, 5, 23, 7, 8, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 0, 5, 25, 1, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 1, 6, 22, 3, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 0, 4, 22, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 1, 5, 22, 3, 1, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 3, 7, 21, 7, 8, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 2, 8, 21, 5, 4, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 2, 8, 21, 5, 6, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 1, 6, 22, 7, 6, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 0, 3, 25, 6, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 2, 7, 21, 8, 4, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 0, 9, 22, 2, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 1, 0, 22, 4, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 3, 5, 25, 8, 6, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db 3, 7, 23, 7, 5, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0
+ClassStart:
+    db 14, 11, 13, 6, 8, 13, 6, 6, 10, 8
+    db 9, 14, 11, 9, 8, 10, 7, 12, 8, 10
+    db 6, 10, 9, 15, 10, 8, 14, 8, 11, 9
+    db 11, 8, 12, 7, 14, 11, 12, 7, 12, 10
+    db 13, 8, 13, 6, 11, 12, 10, 6, 12, 12
+    db 10, 15, 10, 8, 10, 10, 8, 10, 8, 8
+    db 16, 10, 14, 5, 6, 15, 5, 7, 10, 6
+    db 11, 14, 12, 7, 12, 11, 10, 9, 11, 8
+    db 8, 9, 10, 10, 15, 10, 13, 8, 10, 9
+    db 7, 10, 10, 14, 9, 9, 13, 9, 12, 11
+    db 6, 11, 9, 16, 8, 8, 15, 9, 10, 12
+    db 8, 12, 10, 10, 11, 9, 11, 11, 9, 15
+    db 14, 9, 15, 6, 8, 14, 6, 6, 12, 9
+    db 6, 9, 10, 15, 11, 9, 14, 8, 12, 8
+    db 16, 12, 12, 5, 6, 13, 5, 8, 9, 6
+    db 10, 16, 9, 9, 8, 9, 7, 14, 8, 8
+    db 12, 8, 13, 6, 13, 12, 11, 6, 13, 10
+    db 9, 9, 11, 12, 13, 10, 13, 8, 10, 9
+ClassGrowth:
+    db 2, 1, 2, 0, 0, 2, 0, 0, 1, 0
+    db 1, 2, 1, 0, 0, 1, 0, 2, 0, 1
+    db 0, 1, 1, 3, 1, 1, 2, 0, 1, 0
+    db 1, 0, 1, 0, 3, 2, 1, 0, 1, 1
+    db 2, 0, 2, 0, 1, 2, 1, 0, 1, 1
+    db 1, 3, 1, 0, 1, 1, 0, 1, 0, 0
+    db 3, 1, 2, 0, 0, 3, 0, 0, 1, 0
+    db 1, 2, 1, 0, 1, 1, 1, 1, 1, 0
+    db 0, 1, 1, 1, 3, 1, 2, 0, 1, 0
+    db 0, 1, 1, 3, 0, 1, 2, 0, 1, 1
+    db 0, 1, 1, 3, 0, 1, 2, 1, 0, 1
+    db 0, 2, 1, 1, 1, 1, 1, 1, 0, 2
+    db 2, 0, 3, 0, 0, 2, 0, 0, 2, 0
+    db 0, 1, 1, 3, 1, 1, 2, 0, 1, 0
+    db 3, 2, 1, 0, 0, 2, 0, 1, 0, 0
+    db 1, 3, 0, 0, 0, 1, 0, 3, 0, 0
+    db 2, 0, 2, 0, 2, 2, 1, 0, 1, 0
+    db 0, 1, 1, 2, 2, 1, 2, 0, 1, 0
 ClassNames:
-    dw StrClass0, StrClass1, StrClass2, StrClass3
+    dw StrClass0, StrClass1, StrClass2, StrClass3, StrClass4, StrClass5, StrClass6, StrClass7, StrClass8, StrClass9, StrClass10, StrClass11, StrClass12, StrClass13, StrClass14, StrClass15, StrClass16, StrClass17
 ClassDescs:
-    dw StrClassD0, StrClassD1, StrClassD2, StrClassD3
+    dw StrClassD0, StrClassD1, StrClassD2, StrClassD3, StrClassD4, StrClassD5, StrClassD6, StrClassD7, StrClassD8, StrClassD9, StrClassD10, StrClassD11, StrClassD12, StrClassD13, StrClassD14, StrClassD15, StrClassD16, StrClassD17
 StrClass0: db "FIGHTER", $FF
 StrClassD0:
-    db 2, 12
+    db 1, 13
     dw .d0
-    db 2, 13
+    db 1, 14
     dw .d1
-    db 2, 14
+    db 1, 15
     dw .d2
     db $FF
 .d0: db "MASTER OF ARMS.", $FF
@@ -135,11 +189,11 @@ StrClassD0:
 .d2: db "ARMOR, BIG HITS.", $FF
 StrClass1: db "ROGUE", $FF
 StrClassD1:
-    db 2, 12
+    db 1, 13
     dw .d0
-    db 2, 13
+    db 1, 14
     dw .d1
-    db 2, 14
+    db 1, 15
     dw .d2
     db $FF
 .d0: db "SNEAK ATTACK ON", $FF
@@ -147,25 +201,315 @@ StrClassD1:
 .d2: db "DASHES AWAY.", $FF
 StrClass2: db "WIZARD", $FF
 StrClassD2:
-    db 2, 12
+    db 1, 13
     dw .d0
-    db 2, 13
+    db 1, 14
     dw .d1
-    db 2, 14
+    db 1, 15
     dw .d2
     db $FF
 .d0: db "FRAIL BUT DEADLY", $FF
 .d1: db "B CASTS FIRE BOLT", $FF
-.d2: db "SPELLS: SLOTS.", $FF
+.d2: db "SPELLS COST MP.", $FF
 StrClass3: db "CLERIC", $FF
 StrClassD3:
-    db 2, 12
+    db 1, 13
     dw .d0
-    db 2, 13
+    db 1, 14
     dw .d1
-    db 2, 14
+    db 1, 15
     dw .d2
     db $FF
 .d0: db "HEALER IN MAIL.", $FF
 .d1: db "B: SACRED FLAME.", $FF
-.d2: db "SPELLS: SLOTS.", $FF
+.d2: db "SPELLS COST MP.", $FF
+StrClass4: db "PALADIN", $FF
+StrClassD4:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 15
+    dw .d2
+    db $FF
+.d0: db "HOLY KNIGHT WHO", $FF
+.d1: db "HEALS AND HITS", $FF
+.d2: db "HARD.", $FF
+StrClass5: db "RANGER", $FF
+StrClassD5:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 15
+    dw .d2
+    db $FF
+.d0: db "WILDS HUNTER.", $FF
+.d1: db "B SHOOTS BOLTS", $FF
+.d2: db "FROM AFAR.", $FF
+StrClass6: db "BARBARIAN", $FF
+StrClassD6:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 15
+    dw .d2
+    db $FF
+.d0: db "RAGE-FUELLED", $FF
+.d1: db "BRUTE. HUGE HP", $FF
+.d2: db "AND DAMAGE.", $FF
+StrClass7: db "MONK", $FF
+StrClassD7:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 15
+    dw .d2
+    db $FF
+.d0: db "FISTS OF STONE.", $FF
+.d1: db "B DASHES. HEALS", $FF
+.d2: db "SELF IN BATTLE.", $FF
+StrClass8: db "DRUID", $FF
+StrClassD8:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 15
+    dw .d2
+    db $FF
+.d0: db "NATURE'S VOICE.", $FF
+.d1: db "HEALS AND SMITES", $FF
+.d2: db "WITH THE WILD.", $FF
+StrClass9: db "WARLOCK", $FF
+StrClassD9:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 15
+    dw .d2
+    db $FF
+.d0: db "PACT MAGE OF", $FF
+.d1: db "CURSES AND", $FF
+.d2: db "VENOM.", $FF
+StrClass10: db "SORCERER", $FF
+StrClassD10:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 15
+    dw .d2
+    db $FF
+.d0: db "BORN WITH RAW", $FF
+.d1: db "MAGIC. HUGE", $FF
+.d2: db "SPELL POWER.", $FF
+StrClass11: db "BARD", $FF
+StrClassD11:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 15
+    dw .d2
+    db $FF
+.d0: db "SONGS THAT HEAL", $FF
+.d1: db "AND SHIELD. FINE", $FF
+.d2: db "MERCHANT PRICES.", $FF
+StrClass12: db "KNIGHT", $FF
+StrClassD12:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 15
+    dw .d2
+    db $FF
+.d0: db "SHIELD-WALL OF", $FF
+.d1: db "THE REALM. THE", $FF
+.d2: db "BEST ARMOR.", $FF
+StrClass13: db "NECROMANCER", $FF
+StrClassD13:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 15
+    dw .d2
+    db $FF
+.d0: db "DARK SCHOLAR OF", $FF
+.d1: db "DEATH, BLIGHT", $FF
+.d2: db "AND BONE.", $FF
+StrClass14: db "BERSERKER", $FF
+StrClassD14:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 15
+    dw .d2
+    db $FF
+.d0: db "SCREAMING STORM", $FF
+.d1: db "OF BLADES. ALL", $FF
+.d2: db "OFFENSE.", $FF
+StrClass15: db "ASSASSIN", $FF
+StrClassD15:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 15
+    dw .d2
+    db $FF
+.d0: db "SHADOW KILLER.", $FF
+.d1: db "POISON, CRITS", $FF
+.d2: db "AND SPEED.", $FF
+StrClass16: db "TEMPLAR", $FF
+StrClassD16:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 15
+    dw .d2
+    db $FF
+.d0: db "WAR-PRIEST WHO", $FF
+.d1: db "SMITES WITH", $FF
+.d2: db "RADIANT FIRE.", $FF
+StrClass17: db "SHAMAN", $FF
+StrClassD17:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 15
+    dw .d2
+    db $FF
+.d0: db "SPIRIT CALLER.", $FF
+.d1: db "HEALS AND HURLS", $FF
+.d2: db "SPIRIT DARTS.", $FF
+RaceTable:
+    db 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+    db 0, 3, 0, 2, 2, 0, 1, 0, 0, 0
+    db 2, 0, 3, 0, 0, 3, 0, 0, 1, 0
+    db 0, 3, 0, 0, 0, 0, 0, 3, 1, 2
+    db 4, 0, 1, 0, 0, 3, 0, 0, 1, 0
+    db 0, 1, 0, 4, 1, 0, 1, 2, 0, 0
+    db 5, 0, 3, 0, 0, 2, 0, 0, 0, 0
+    db 0, 2, 0, 1, 2, 0, 3, 1, 0, 2
+    db 3, 0, 1, 0, 0, 1, 1, 0, 2, 2
+RaceNames:
+    dw StrRace0, StrRace1, StrRace2, StrRace3, StrRace4, StrRace5, StrRace6, StrRace7, StrRace8
+RaceDescs:
+    dw StrRaceD0, StrRaceD1, StrRaceD2, StrRaceD3, StrRaceD4, StrRaceD5, StrRaceD6, StrRaceD7, StrRaceD8
+StrRace0: db "HUMAN", $FF
+StrRaceD0:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 16
+    dw .d2
+    db $FF
+.d0: db "ADAPTABLE AND", $FF
+.d1: db "DRIVEN. +1 ALL.", $FF
+.d2: db "+1 TO EVERYTHING", $FF
+StrRace1: db "ELF", $FF
+StrRaceD1:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 16
+    dw .d2
+    db $FF
+.d0: db "GRACEFUL, KEEN-", $FF
+.d1: db "EYED, LONG-LIVED.", $FF
+.d2: db "+3DEX +2INT +2WIS ", $FF
+StrRace2: db "DWARF", $FF
+StrRaceD2:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 16
+    dw .d2
+    db $FF
+.d0: db "STOUT MOUNTAIN", $FF
+.d1: db "FOLK. HARD TO KILL", $FF
+.d2: db "+3CON +3VIT +2STR ", $FF
+StrRace3: db "HALFLING", $FF
+StrRaceD3:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 16
+    dw .d2
+    db $FF
+.d0: db "SMALL, QUICK AND", $FF
+.d1: db "VERY LUCKY.", $FF
+.d2: db "+3DEX +3LCK +2CHA ", $FF
+StrRace4: db "ORC", $FF
+StrRaceD4:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 16
+    dw .d2
+    db $FF
+.d0: db "FIERCE AND STRONG", $FF
+.d1: db "AS IRON.", $FF
+.d2: db "+4STR +3VIT +1CON ", $FF
+StrRace5: db "GNOME", $FF
+StrRaceD5:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 16
+    dw .d2
+    db $FF
+.d0: db "TINKERS AND", $FF
+.d1: db "SPELL-SCHOLARS.", $FF
+.d2: db "+4INT +2LCK +1DEX ", $FF
+StrRace6: db "HALF-GIANT", $FF
+StrRaceD6:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 16
+    dw .d2
+    db $FF
+.d0: db "TOWERING. SLOW", $FF
+.d1: db "BUT MIGHTY.", $FF
+.d2: db "+5STR +3CON +2VIT", $FF
+StrRace7: db "FAE", $FF
+StrRaceD7:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 16
+    dw .d2
+    db $FF
+.d0: db "FOREST SPIRITS", $FF
+.d1: db "OF WIND + LIGHT.", $FF
+.d2: db "+3SPI +2DEX +2WIS ", $FF
+StrRace8: db "DRAGONKIN", $FF
+StrRaceD8:
+    db 1, 13
+    dw .d0
+    db 1, 14
+    dw .d1
+    db 1, 16
+    dw .d2
+    db $FF
+.d0: db "SCALED, PROUD,", $FF
+.d1: db "AND IRON-WILLED.", $FF
+.d2: db "+3STR +2WIL +2CHA ", $FF

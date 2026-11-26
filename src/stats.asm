@@ -228,16 +228,6 @@ CalcMonsterExtra:                ; de = level
     ld [wMEVA + 1], a
     ret
 
-; ---- player: class start + growth (framework attributes) ---------------------------
-;               STR DEX CON INT WIS VIT SPI LCK WIL CHA
-ClassStart: db  14, 11, 13,  6,  8, 13,  6,  6, 10,  8   ; fighter
-            db   9, 14, 11,  9,  8, 10,  7, 12,  8, 10   ; rogue
-            db   6, 10,  9, 15, 10,  8, 14,  8, 11,  9   ; wizard
-            db  11,  8, 12,  7, 14, 11, 12,  7, 12, 10   ; cleric
-ClassGrowth: db  2,  1,  2,  0,  0,  2,  0,  0,  1,  0
-            db   1,  2,  1,  0,  0,  1,  0,  2,  0,  1
-            db   0,  1,  1,  3,  1,  1,  2,  0,  1,  0
-            db   1,  0,  1,  0,  3,  2,  1,  0,  1,  1
 DEF NUM_ATTR EQU 10
 
 ClassRow10:                      ; hl = table + class * 10
@@ -267,6 +257,29 @@ InitAttributes:                  ; level 1 character of wClass
     inc de
     dec c
     jr nz, .l
+    ld a, [wRace]                ; + racial bonuses
+    ld b, a
+    add a, a
+    add a, a
+    add a, b
+    add a, a                     ; *10
+    ld hl, RaceTable
+    add a, l
+    ld l, a
+    jr nc, .rnc
+    inc h
+.rnc:
+    ld de, wAttr
+    ld c, NUM_ATTR
+.rb:
+    ld a, [de]
+    add a, [hl]
+    ld [de], a
+    inc de
+    inc de
+    inc hl
+    dec c
+    jr nz, .rb
     ld a, 1
     ld [wLevel], a
     xor a
@@ -881,10 +894,10 @@ PlayerMeleeDamage:
     call LoadW
     call Spread
     call OutgoingMods
-    ld a, [wCur + E_FRESH]       ; rogue sneak attack +50% on a fresh foe
+    ld a, [wCur + E_FRESH]       ; rogue-type sneak attack +50% on a fresh foe
     and a
     jr z, .nsa
-    ld a, [wClass]
+    ld a, [wClassArch]
     cp 1
     jr nz, .nsa
     ld a, 50
@@ -1655,6 +1668,16 @@ DrawSheet:
     call WinPrintList
     ld hl, Sheet2Values
     call PutList
+    ld hl, StrRaceL
+    ld b, 1
+    ld c, 13
+    call WinPrint
+    ld a, [wRace]
+    ld hl, RaceNames
+    call TableWord
+    ld b, 7
+    ld c, 13
+    call WinPrint
     ld hl, StrSheetHint2
     ld b, 1
     ld c, 16
@@ -1756,7 +1779,6 @@ Sheet2Labels:
     TXT 10, 10, StrMPNl
     TXT 1, 11, StrDSCl
     TXT 10, 11, StrSPD
-    TXT 1, 13, StrEffects
     db $FF
 Sheet2Values:
     db 4, 2
@@ -1837,7 +1859,7 @@ StrMPNl: db "MPN", $FF
 StrDSCl: db "DSC", $FF
 StrSPD:  db "SPD", $FF
 StrPTS:  db "PTS", $FF
-StrEffects: db "EFFECTS ON HUD", $FF
+StrRaceL: db "RACE:", $FF
 StrSheetHint1: db "A:SPEND  RIGHT:PG2", $FF
 StrSheetHint2: db "LEFT:PG1  B:BACK", $FF
 MsgDodge: db "MISS!"

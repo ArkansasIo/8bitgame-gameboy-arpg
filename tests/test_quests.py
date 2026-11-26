@@ -20,7 +20,7 @@ def shot(name):
     pb.screen.image.convert("RGB").resize((320, 288), 0).save(f"shots/q_{name}.png")
 def face_up_at(x, y):
     setm("wPlayerX", x); setm("wPlayerY", y); setm("wPlayerDir", 1); run(2)
-run(420); tap("start", 30); tap("a", 40); tap("a", 30)          # fighter
+run(420); tap("start", 30); tap("a", 30); tap("a", 40); tap("a", 30)          # fighter
 face_up_at(32, 57); tap("a", 30); shot("1_elder")
 for _ in range(4): tap("a", 20)
 print("quests", [m("wQState", i) for i in range(4)])

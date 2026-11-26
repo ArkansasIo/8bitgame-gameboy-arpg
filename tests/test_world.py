@@ -23,7 +23,7 @@ def go(d):
     setm("wPlayerInv", 90)
     x, y = EDGE[d]
     setm("wPlayerX", x); setm("wPlayerY", y); hold(d, 6); run(4)
-run(420); tap("start", 30); tap("a", 20)
+run(420); tap("start", 30); tap("a", 30); tap("a", 40); tap("a", 20)
 shot("00_town"); print("room", m("wRoom"), "zone", m("wZone"))
 for path, name in [("left", "forest"), ("right", "back"), ("right", "desert"), ("left", "back2"),
                    ("up", "tundra"), ("down", "back3"), ("down", "swamp"), ("down", "swamp2"),

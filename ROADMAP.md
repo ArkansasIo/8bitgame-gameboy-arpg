@@ -15,21 +15,22 @@ Throne and Liberty names, maps or assets.
 - [x] v0.5.0: framework stats + buff/debuff engine
 - [x] v0.6.0: Diablo IV-style gear (11 slots, 6 rarities + sets, item level/power, affixes,
       legendary powers, 30 uniques, smith +1 to +10, salvage, 420-item catalog)
+- [x] v0.7.0: character creation, 9 races x 18 classes (racial bonuses, class palettes, kits)
 
 1. ~~**Framework stats (v0.5):** 10 attributes (STR DEX CON INT WIS VIT SPI LCK WIL CHA),
    accuracy/evasion hit chance, armor/resist mitigation, crit chance/damage/resistance,
    tenacity, CDR, haste, penetration, regen~~ done
 2. ~~**Buff/debuff engine (v0.5):** power, haste, shield, fortify, regen, stealth / stun, slow,
    weakness, frailty, burn, poison. Duration, stacking, refresh~~ done
-3. **Character creation (v0.6):** 9 races x 18 classes (base sprites + palettes, racial bonuses)
+3. ~~**Character creation (v0.7):** 9 races x 18 classes (base sprites + palettes, racial bonuses)~~ done
 4. ~~**Gear (v0.6), Diablo IV style:** 11 slots, 6 rarities (Common to Mythic), item level + power level,
    ~420 generated weapons/armor/accessories, set gear with 2/4/6-piece bonuses,
    rings/talismans, smith upgrades +1 to +10, random affixes~~ done
-5. **Professions (v0.7):** gathering (mining, herbalism, skinning, fishing) and crafting
+5. **Professions (v0.8):** gathering (mining, herbalism, skinning, fishing) and crafting
    (smithing, alchemy, tailoring, cooking) with skill levels
-6. **World (v0.8):** original continent map, kingdoms, cities, towns, NPCs, outdoor and
+6. **World (v0.9):** original continent map, kingdoms, cities, towns, NPCs, outdoor and
    underground zones/biomes
-7. **Endgame (v0.9):** dungeon finder with 90 instances (dungeons, raids, trials), a 100-floor
+7. **Endgame (v0.10):** dungeon finder with 90 instances (dungeons, raids, trials), a 100-floor
    tower, 420-monster roster, bosses and arch-bosses
 8. **Presentation (v1.0):** more detailed graphics, 42 music tracks + sound effects
 

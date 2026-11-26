@@ -1,5 +1,5 @@
 ; ============================================================================
-;  ARPG GB QUEST v0.6.0 (build 20261126) - action RPG for Game Boy Color
+;  ARPG GB QUEST v0.7.0 (build 20261126) - action RPG for Game Boy Color
 ;  Assembler: RGBDS 0.9+   (rgbasm / rgblink / rgbfix)
 ;
 ;  * GBC-enhanced: full color on Game Boy Color / GBA / GBA SP,
@@ -109,6 +109,7 @@ DEF M_ALLOC     EQU 18
 DEF M_GEAR      EQU 19
 DEF M_GEARSUB   EQU 20
 DEF M_SMITH     EQU 21
+DEF M_RACE      EQU 22
 DEF INV_SLOTS   EQU 10
 
 DEF DIR_DOWN   EQU 0
@@ -2642,7 +2643,7 @@ MenuHandlers:
     dw MenuPause, MenuStatus, MenuItems, MenuItemSub, MenuBoxMsg
     dw MenuOptions, MenuSkills, MenuBeast, MenuBeastPage, MenuIntro, MenuMap
     dw MenuClass, MenuShop, MenuShopList, MenuInn, MenuDialog, MenuQuests, MenuSaveAsk, MenuAlloc
-    dw MenuGear, MenuGearSub, MenuSmith
+    dw MenuGear, MenuGearSub, MenuSmith, MenuRace
 
 EnterMenuState:
     ld a, STATE_MENU
@@ -3689,7 +3690,7 @@ TitleList:
     TXT 3, 16, StrCredit
     db $FF
 StrTitle:    db "ARPG GB QUEST", $FF
-StrTagline:  db "VERSION 0.6.0", $FF
+StrTagline:  db "VERSION 0.7.0", $FF
 StrGoal1:    db "FIVE LANDS. FOUR", $FF
 StrGoal2:    db "SEALS. ONE OGRE.", $FF
 StrPress:    db "PRESS START", $FF
@@ -3974,6 +3975,10 @@ wCastMod:      db
 wSkill1:       db
 wSkill2:       db
 wBAction:      db
+wRace:         db
+wClassArch:    db
+wRaceCur:      db
+wClassTop:     db
 wProf:         db
 wAtk:          db
 wAC:           db

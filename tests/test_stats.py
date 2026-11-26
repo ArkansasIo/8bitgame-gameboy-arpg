@@ -17,7 +17,7 @@ def tap(b, f=14):
     pb.button_press(b); run(3); pb.button_release(b); run(f)
 def shot(name):
     pb.screen.image.convert("RGB").resize((320, 288), 0).save(f"shots/st_{name}.png")
-run(420); shot("0_title"); tap("start", 30); tap("a", 40); tap("a", 30)
+run(420); shot("0_title"); tap("start", 30); tap("a", 30); tap("a", 40); tap("a", 30)
 print("L", w("wLevel"), "HP", w("wHP"), "/", w("wMaxHP"), "MP", w("wMP"), "ATK", w("wATK"), "DEF", w("wDEF"),
       "CRIT", m("wCrit"), "STR", w("wStr"), "ACC", w("wACC"), "EVA", w("wEVA"))
 shot("1_town_hud")

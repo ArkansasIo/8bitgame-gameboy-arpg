@@ -19,7 +19,7 @@ def tap(b, f=14):
     pb.button_press(b); run(3); pb.button_release(b); run(f)
 def shot(name):
     pb.screen.image.convert("RGB").resize((320, 288), 0).save(f"shots/fx_{name}.png")
-run(600); tap("start", 40); tap("a", 40); tap("a", 30)            # fighter
+run(600); tap("start", 40); tap("a", 30); tap("a", 40); tap("a", 30)            # fighter
 setm("wPauseCur", 2); tap("start", 20); tap("a", 30); tap("down"); tap("a", 30)   # Action Surge
 print("buffs power", m("wBuffPower"), "haste", m("wBuffHaste"), "atkTime", m("wAtkTime"))
 tap("a", 20); tap("b", 20); tap("b", 20); run(10); shot("1_hud_buffs")
@@ -44,7 +44,7 @@ print("debuff seen:", got is not None)
 pb.stop()
 # wizard fire bolt -> burn on monster
 pb = boot()
-run(600); tap("start", 40); tap("down"); tap("down"); tap("a", 40); tap("a", 30)
+run(600); tap("start", 40); tap("a", 30); tap("down"); tap("down"); tap("a", 40); tap("a", 30)
 setw("wHP", 9999); setw("wMaxHP", 9999)
 setm("wPlayerX", 4); setm("wPlayerY", 56); pb.button_press("left"); run(6); pb.button_release("left"); run(5)
 burned = False

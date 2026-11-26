@@ -1,6 +1,6 @@
 # ARPG GB QUEST: an action RPG for Game Boy Color
 
-**Version 0.6.0, build 20261126**
+**Version 0.7.0, build 20261126**
 
 A top-down action RPG written in SM83 assembly. It runs on a Game Boy Color, GBA or GBA SP
 in full color, and on an original Game Boy in grayscale. The game uses a 64 KB MBC5
@@ -25,7 +25,7 @@ in Whisperwood, the Sunscar Dunes, Frostfang Reach and Mirefen Marsh, then end t
 | System | What it does | Source |
 |---|---|---|
 | World | Hub town plus 5 zones (16 rooms) with their own tiles, palettes, monsters and bosses; a zone-name banner; the crypt is sealed until all 4 bosses are dead | `gen_world.py`, `game.asm` |
-| Classes | Fighter, Rogue, Wizard and Cleric, each with SRD hit dice, ability modifiers, starting gear, sprite and colors | `src/classes.asm`, `gen_data.py` |
+| Character creation | 9 races (Human, Elf, Dwarf, Halfling, Orc, Gnome, Half-Giant, Fae, Dragonkin) with attribute bonuses, then 18 classes on 4 archetypes, each with its own colors, starting stats, growth, skills, B action and starting kit | `src/classes.asm`, `gen_data.py` |
 | Progression | Levels 1-720 for players and monsters; XP curve 15 + 8L + L^2/64; +3 attribute points per level plus class growth | `src/stats.asm` |
 | Attributes | 10 framework attributes: STR, DEX, CON, INT, WIS, VIT, SPI, LCK, WIL, CHA (spend points from the character sheet) | `src/stats.asm` |
 | Sub-stats | HP, MP, attack power, spell power, healing power, accuracy, evasion, armor, resist, crit %, crit damage, block, tenacity, status resist, CDR, armor/magic penetration, merchant discount, speed, HP/MP regen | `src/stats.asm` |
@@ -59,7 +59,7 @@ Emulicious, or on a flash cart.
 ```
 game.asm         engine: boot, banks, rendering, window menus, rooms, player, enemies, HUD, sound
 src/stats.asm    levels 1-720, attributes, sub-stats, damage formulas, HUD, sheet
-src/classes.asm  class select, ability scores, derived stats, character sheet
+src/classes.asm  race + class select, ability scores, derived stats, character sheet
 src/combat.asm   damage rolls, kills + loot, projectiles, skills and spells
 src/gear.asm     item generation, affixes, powers, sets, uniques, bag/worn tabs, smith
 src/inventory.asm bag, equipment, rarity display, potions

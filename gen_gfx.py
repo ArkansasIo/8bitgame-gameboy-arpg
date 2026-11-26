@@ -688,11 +688,25 @@ ZOBJ = {
 SWORD = [BLACK, (30, 30, 31), (24, 18, 4), (3, 3, 6)]
 HEART = [BLACK, (31, 24, 24), (30, 4, 6), (6, 0, 0)]
 FLASH = [BLACK, (31, 10, 6), (31, 31, 31), (31, 26, 0)]
-CLASS_PAL = [  # OBJ palette 0 per class: fighter, rogue, wizard, cleric
- [BLACK, (30, 28, 22), (6, 10, 26), (2, 2, 8)],
- [BLACK, (30, 26, 20), (8, 14, 6), (2, 4, 1)],
- [BLACK, (30, 28, 22), (16, 6, 24), (4, 1, 8)],
- [BLACK, (31, 31, 28), (26, 20, 4), (6, 4, 1)],
+CLASS_PAL = [  # OBJ palette 0 per class (18): skin/steel, main colour, dark
+ [BLACK, (30, 28, 22), (6, 10, 26), (2, 2, 8)],      # fighter: blue
+ [BLACK, (30, 26, 20), (8, 14, 6), (2, 4, 1)],       # rogue: green
+ [BLACK, (30, 28, 22), (16, 6, 24), (4, 1, 8)],      # wizard: purple
+ [BLACK, (31, 31, 28), (26, 20, 4), (6, 4, 1)],      # cleric: gold
+ [BLACK, (31, 31, 31), (28, 24, 8), (8, 6, 2)],      # paladin: white/gold
+ [BLACK, (30, 26, 20), (10, 18, 6), (3, 6, 1)],      # ranger: leaf
+ [BLACK, (30, 24, 18), (24, 6, 4), (7, 1, 1)],       # barbarian: red
+ [BLACK, (31, 26, 18), (28, 14, 2), (8, 3, 0)],      # monk: orange
+ [BLACK, (28, 30, 22), (6, 20, 8), (1, 6, 2)],       # druid: green
+ [BLACK, (28, 24, 30), (10, 2, 16), (3, 0, 5)],      # warlock: dark purple
+ [BLACK, (31, 26, 24), (26, 2, 8), (8, 0, 2)],       # sorcerer: crimson
+ [BLACK, (30, 28, 22), (4, 20, 20), (1, 6, 6)],      # bard: teal
+ [BLACK, (31, 31, 31), (18, 20, 24), (4, 5, 8)],     # knight: steel
+ [BLACK, (26, 30, 26), (6, 10, 6), (1, 2, 1)],       # necromancer: grave green
+ [BLACK, (30, 22, 18), (18, 2, 2), (5, 0, 0)],       # berserker: blood
+ [BLACK, (24, 24, 26), (8, 8, 10), (1, 1, 2)],       # assassin: shadow
+ [BLACK, (31, 31, 31), (26, 6, 6), (6, 1, 1)],       # templar: white/red
+ [BLACK, (30, 26, 20), (6, 12, 24), (8, 4, 1)],      # shaman: blue/brown
 ]
 def mono(sh):
     bg = [sh] * 8
