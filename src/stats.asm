@@ -205,23 +205,48 @@ CalcCurMonster:                  ; stats for wCur
     ld a, [wCur + E_TYPE]
     jp CalcMonster
 
-; ---- player: class start + growth ---------------------------------------------------
-;                 STR DEX VIT INT FTH LCK
-ClassStart:  db   14, 11, 13,  6,  8,  6   ; fighter
-             db    9, 14, 11,  9,  8, 10   ; rogue
-             db    6, 10,  9, 15, 10,  8   ; wizard
-             db   11,  8, 12,  7, 14,  7   ; cleric
-ClassGrowth: db    2,  1,  2,  0,  0,  0
-             db    1,  2,  1,  0,  0,  1
-             db    0,  1,  1,  3,  0,  0
-             db    1,  0,  2,  0,  2,  0
+; monster accuracy / evasion / resist from level (after CalcMonster)
+CalcMonsterExtra:                ; de = level
+    ld h, d
+    ld l, e
+    add hl, hl
+    add hl, hl
+    ld bc, 60
+    add hl, bc
+    ld a, l
+    ld [wMACC], a
+    ld a, h
+    ld [wMACC + 1], a
+    ld h, d
+    ld l, e
+    add hl, hl
+    ld bc, 20
+    add hl, bc
+    ld a, l
+    ld [wMEVA], a
+    ld a, h
+    ld [wMEVA + 1], a
+    ret
 
-ClassRow6:                       ; hl = table + class * 6
+; ---- player: class start + growth (framework attributes) ---------------------------
+;               STR DEX CON INT WIS VIT SPI LCK WIL CHA
+ClassStart: db  14, 11, 13,  6,  8, 13,  6,  6, 10,  8   ; fighter
+            db   9, 14, 11,  9,  8, 10,  7, 12,  8, 10   ; rogue
+            db   6, 10,  9, 15, 10,  8, 14,  8, 11,  9   ; wizard
+            db  11,  8, 12,  7, 14, 11, 12,  7, 12, 10   ; cleric
+ClassGrowth: db  2,  1,  2,  0,  0,  2,  0,  0,  1,  0
+            db   1,  2,  1,  0,  0,  1,  0,  2,  0,  1
+            db   0,  1,  1,  3,  1,  1,  2,  0,  1,  0
+            db   1,  0,  1,  0,  3,  2,  1,  0,  1,  1
+DEF NUM_ATTR EQU 10
+
+ClassRow10:                      ; hl = table + class * 10
     ld a, [wClass]
+    add a, a
     ld b, a
     add a, a
-    add a, b
     add a, a
+    add a, b
     add a, l
     ld l, a
     ret nc
@@ -230,9 +255,9 @@ ClassRow6:                       ; hl = table + class * 6
 
 InitAttributes:                  ; level 1 character of wClass
     ld hl, ClassStart
-    call ClassRow6
+    call ClassRow10
     ld de, wAttr
-    ld c, 6
+    ld c, NUM_ATTR
 .l:
     ld a, [hl+]
     ld [de], a
@@ -250,6 +275,7 @@ InitAttributes:                  ; level 1 character of wClass
     ld [wXP + 1], a
     ld [wStatPts], a
     ld [wStatPts + 1], a
+    call ClearEffects
     call RecalcStats
     jp FullRestore
 
@@ -264,43 +290,57 @@ FullRestore:
     ld [wMP + 1], a
     ret
 
-; ---- derived sub-stats ----------------------------------------------------------------
-RecalcStats:
-    ; MaxHP = 40 + VIT*6 + LV*4
-    ld hl, wVit
+; hl = [hl1]*a1 helper: AttrMul a = multiplier, hl = attribute address
+AttrMul:
+    push af
     call LoadW
-    ld a, 6
-    call MulHL_A
+    pop af
+    jp MulHL_A
+
+StoreW:                          ; [de] = hl
+    ld a, l
+    ld [de], a
+    inc de
+    ld a, h
+    ld [de], a
+    ret
+
+; ---- derived sub-stats (framework section 3-6) ---------------------------------------
+RecalcStats:
+    ; MaxHP = VIT*8 + CON*5 + LV*4 + 40
+    ld hl, wVit
+    ld a, 8
+    call AttrMul
+    push hl
+    ld hl, wCon
+    ld a, 5
+    call AttrMul
+    pop de
+    call AddSat
     push hl
     ld hl, wLevel
-    call LoadW
-    add hl, hl
-    add hl, hl
+    ld a, 4
+    call AttrMul
     pop de
     call AddSat
     ld de, 40
     call AddSat
-    ld a, l
-    ld [wMaxHP], a
-    ld a, h
-    ld [wMaxHP + 1], a
-    ; MaxMP = 10 + INT*3 + FTH*2
+    ld de, wMaxHP
+    call StoreW
+    ; MaxMP = INT*3 + SPI*4 + 10
     ld hl, wInt
-    call LoadW
     ld a, 3
-    call MulHL_A
+    call AttrMul
     push hl
-    ld hl, wFth
-    call LoadW
-    add hl, hl
+    ld hl, wSpi
+    ld a, 4
+    call AttrMul
     pop de
     call AddSat
     ld de, 10
     call AddSat
-    ld a, l
-    ld [wMaxMP], a
-    ld a, h
-    ld [wMaxMP + 1], a
+    ld de, wMaxMP
+    call StoreW
     ; weapon base = (n*(s+1)/2 + magic) * 4 (+28 fire)
     xor a
     ld [wWpnBase], a
@@ -336,7 +376,7 @@ RecalcStats:
 .nf:
     ld [wWpnBase], a
 .noW:
-    ; ATK = weapon + 2*max(STR, DEX if finesse) + LV
+    ; ATK (physical power) = 2.5 * max(STR, DEX if finesse) + weapon + LV
     ld hl, wStr
     call LoadW
     ld a, [wWpnFlags]
@@ -350,45 +390,56 @@ RecalcStats:
     pop hl
     call MaxHLDE
 .str:
-    add hl, hl
+    ld a, 5
+    call MulHL_A
+    srl h
+    rr l
     ld a, [wWpnBase]
     ld e, a
     ld d, 0
     call AddSat
-    push hl
-    ld hl, wLevel
-    call LoadW
-    ld d, h
-    ld e, l
-    pop hl
-    call AddSat
-    ld a, l
-    ld [wATK], a
-    ld a, h
-    ld [wATK + 1], a
-    ; MAG = INT*2 + FTH + LV
+    call AddLevel
+    ld de, wATK
+    call StoreW
+    ; MAG (spell power) = 2.5 * INT + WIS + LV
     ld hl, wInt
+    ld a, 5
+    call AttrMul
+    srl h
+    rr l
+    ld de, wWis
+    call AddAttr
+    call AddLevel
+    ld de, wMAG
+    call StoreW
+    ; HEAL (healing power) = 2 * WIS + SPI
+    ld hl, wWis
     call LoadW
     add hl, hl
-    push hl
-    ld hl, wFth
+    ld de, wSpi
+    call AddAttr
+    ld de, wHEAL
+    call StoreW
+    ; ACC = 2*DEX + 2*LV + 50 ; EVA = DEX + LCK/2 + LV
+    ld hl, wDex
     call LoadW
-    ld d, h
-    ld e, l
-    pop hl
+    add hl, hl
+    call AddLevel
+    call AddLevel
+    ld de, 50
     call AddSat
-    push hl
-    ld hl, wLevel
+    ld de, wACC
+    call StoreW
+    ld hl, wLck
     call LoadW
-    ld d, h
-    ld e, l
-    pop hl
-    call AddSat
-    ld a, l
-    ld [wMAG], a
-    ld a, h
-    ld [wMAG + 1], a
-    ; armor base = (AC + magic) * 2, flags
+    srl h
+    rr l
+    ld de, wDex
+    call AddAttr
+    call AddLevel
+    ld de, wEVA
+    call StoreW
+    ; armor base from gear = (AC + magic) * 2
     xor a
     ld [wArmBase], a
     ld [wArmFlags], a
@@ -407,9 +458,13 @@ RecalcStats:
     ld a, [hl]
     ld [wArmFlags], a
 .noA:
-    ; DEF = armor + VIT + LV/2
+    ; ARMOR = gear + CON + VIT/2 + LV/2
     ld hl, wVit
     call LoadW
+    srl h
+    rr l
+    ld de, wCon
+    call AddAttr
     ld a, [wArmBase]
     ld e, a
     ld d, 0
@@ -419,68 +474,115 @@ RecalcStats:
     call LoadW
     srl h
     rr l
-    ld d, h
-    ld e, l
-    pop hl
+    pop de
     call AddSat
-    ld a, l
-    ld [wDEF], a
-    ld a, h
-    ld [wDEF + 1], a
-    ; CRIT% = 5 + DEX/40 + LCK/30   (cap 50)
-    ld hl, wDex
+    ld de, wDEF
+    call StoreW
+    ; RESIST = WIS + SPI/2 + WIL/2
+    ld hl, wSpi
     call LoadW
-    ld a, 40
-    call DivHL_A
+    push hl
+    ld hl, wWil
+    call LoadW
+    pop de
+    add hl, de
+    srl h
+    rr l
+    ld de, wWis
+    call AddAttr
+    ld de, wRES
+    call StoreW
+    ; percentages ---------------------------------------------------
+    ld hl, wDex                  ; CRIT% = 5 + DEX/25 + LCK/20 (cap 60)
+    ld a, 25
+    call AttrDiv
     push hl
     ld hl, wLck
-    call LoadW
-    ld a, 30
-    call DivHL_A
+    ld a, 20
+    call AttrDiv
     pop de
     add hl, de
     ld de, 5
     add hl, de
-    ld a, 50
+    ld a, 60
     call CapHL
     ld [wCrit], a
-    ; CRITDMG in eighths = 12 + LCK/60  (150% .. 300%)
-    ld hl, wLck
-    call LoadW
-    ld a, 60
-    call DivHL_A
-    ld de, 12
+    ld hl, wLck                  ; CRIT DMG% = 50 + LCK/10 (cap 250)
+    ld a, 10
+    call AttrDiv
+    ld de, 50
     add hl, de
-    ld a, 24
+    ld a, 250
     call CapHL
-    ld [wCrit8], a
-    ; DODGE% = DEX/50 (cap 25), BLOCK% = VIT/80 (cap 25)
-    ld hl, wDex
-    call LoadW
-    ld a, 50
-    call DivHL_A
-    ld a, 25
-    call CapHL
-    ld [wDodgeP], a
-    ld hl, wVit
-    call LoadW
-    ld a, 80
-    call DivHL_A
+    ld [wCritDmg], a
+    ld hl, wCon                  ; BLOCK% = CON/60 (cap 25)
+    ld a, 60
+    call AttrDiv
     ld a, 25
     call CapHL
     ld [wBlockP], a
-    ; SPEED: swing time 12 - DEX/150 (min 6)
-    ld hl, wDex
-    call LoadW
+    ld hl, wWil                  ; TENACITY% = WIL/20 (cap 50)
+    ld a, 20
+    call AttrDiv
+    ld a, 50
+    call CapHL
+    ld [wTen], a
+    ld hl, wWil                  ; STATUS RESIST% = WIL/25 + CON/50 (cap 60)
+    ld a, 25
+    call AttrDiv
+    push hl
+    ld hl, wCon
+    ld a, 50
+    call AttrDiv
+    pop de
+    add hl, de
+    ld a, 60
+    call CapHL
+    ld [wSRes], a
+    ld hl, wWis                  ; CDR% = WIS/50 (cap 30)
+    ld a, 50
+    call AttrDiv
+    ld a, 30
+    call CapHL
+    ld [wCDR], a
+    ld hl, wStr                  ; ARMOR PEN% = STR/40, MAGIC PEN% = INT/40 (cap 40)
+    ld a, 40
+    call AttrDiv
+    ld a, 40
+    call CapHL
+    ld [wAPen], a
+    ld hl, wInt
+    ld a, 40
+    call AttrDiv
+    ld a, 40
+    call CapHL
+    ld [wMPen], a
+    ld hl, wCha                  ; DISCOUNT% = CHA/20 (cap 30)
+    ld a, 20
+    call AttrDiv
+    ld a, 30
+    call CapHL
+    ld [wDiscount], a
+    ld hl, wDex                  ; swing time 12 - DEX/150 - haste buff (min 5)
     ld a, 150
-    call DivHL_A
+    call AttrDiv
     ld a, 6
     call CapHL
     ld b, a
+    ld a, [wBuffHaste]
+    and a
+    jr z, .nh
+    inc b
+    inc b
+    inc b
+.nh:
     ld a, ATTACK_TIME
     sub b
     ld [wAtkTime], a
-    ; clamp current HP/MP
+    ld b, a
+    ld a, ATTACK_TIME + 1
+    sub b
+    ld [wSpdRating], a
     ld hl, wHP
     ld de, wMaxHP
     call ClampWord
@@ -492,11 +594,11 @@ ClampWord:                       ; [hl] = min([hl], [de])
     ld c, a
     inc de
     ld a, [de]
-    ld b, a                      ; bc = max
+    ld b, a
     ld a, [hl+]
     ld e, a
     ld a, [hl-]
-    ld d, a                      ; de = value
+    ld d, a
     ld a, c
     sub e
     ld a, b
@@ -507,6 +609,30 @@ ClampWord:                       ; [hl] = min([hl], [de])
     ld [hl], b
     ret
 
+AddLevel:                        ; hl += level
+    push hl
+    ld hl, wLevel
+    call LoadW
+    ld d, h
+    ld e, l
+    pop hl
+    jp AddSat
+
+AddAttr:                         ; hl += [de]
+    ld a, [de]
+    ld c, a
+    inc de
+    ld a, [de]
+    ld d, a
+    ld e, c
+    jp AddSat
+
+AttrDiv:                         ; hl = [hl] / a
+    push af
+    call LoadW
+    pop af
+    jp DivHL_A
+
 CapHL:                           ; a = min(hl, a)
     ld b, a
     ld a, h
@@ -515,12 +641,89 @@ CapHL:                           ; a = min(hl, a)
     ret nz
     ld a, l
     cp b
-    ret nc
+    ret c
+    ld a, b
     ret
 
+; a = 100 * hl / (hl + de), using scaled 8-bit division
+Ratio100:
+.scale:
+    push hl
+    add hl, de
+    ld a, h
+    pop hl
+    jr c, .shift
+    and a
+    jr z, .ok
+.shift:
+    srl h
+    rr l
+    srl d
+    rr e
+    jr .scale
+.ok:
+    push hl
+    add hl, de
+    ld a, l
+    pop hl
+    and a
+    ret z                        ; 0/0
+    push af
+    ld a, 100
+    call MulHL_A
+    pop af
+    jp DivHL_A                   ; result in l
+.done:
+    ret
+
+; armor mitigation % = armor / (armor + 10 * attackerLevel), cap 70
+; hl = armor, de = attacker level -> a = percent
+Mitigation:
+    push hl
+    ld h, d
+    ld l, e
+    ld a, 10
+    call MulHL_A
+    ld d, h
+    ld e, l
+    pop hl
+    call Ratio100
+    ld a, l
+    cp 70
+    ret c
+    ld a, 70
+    ret
+
+; hl = hl * (100 - a) / 100
+ReducePct:
+    ld b, a
+    ld a, 100
+    sub b
+    push af
+    srl h
+    rr l
+    srl h
+    rr l                         ; /4
+    pop af
+    call MulHL_A
+    ld a, 25
+    jp DivHL_A
+
+; hl = hl * (100 + a) / 100   (a <= 155)
+IncreasePct:
+    push hl
+    srl h
+    rr l
+    srl h
+    rr l
+    call MulHL_A
+    ld a, 25
+    call DivHL_A
+    pop de
+    jp AddSat
+
 ; ---- XP and levels ---------------------------------------------------------------------
-; de = XP needed for the next level: 15 + LV*8 + LV*LV/64
-XpNeeded:
+XpNeeded:                        ; de = 15 + LV*8 + (LV/8)^2
     ld hl, wLevel
     call LoadW
     push hl
@@ -532,7 +735,6 @@ XpNeeded:
     ld e, l
     pop hl
     push de
-    ld a, h                      ; LV*LV/64 = (LV/8)^2 approx
     srl h
     rr l
     srl h
@@ -547,8 +749,7 @@ XpNeeded:
     ld e, l
     ret
 
-; de = XP gained
-AddXP:
+AddXP:                           ; de = XP gained
     ld hl, wXP
     ld a, [hl]
     add a, e
@@ -557,7 +758,7 @@ AddXP:
     adc a, d
     ld [hl], a
     jr nc, CheckLevelUp
-    ld a, $FF                    ; overflow guard
+    ld a, $FF
     ld [hl-], a
     ld [hl], a
 CheckLevelUp:
@@ -577,11 +778,11 @@ CheckLevelUp:
     ld c, a
     ld a, h
     sbc a, d
-    ret c                        ; not enough yet
+    ret c
     ld [wXP + 1], a
     ld a, c
     ld [wXP], a
-    ld hl, wLevel                ; level up!
+    ld hl, wLevel
     inc [hl]
     jr nz, .nc
     inc hl
@@ -594,10 +795,10 @@ CheckLevelUp:
     jr nc, .nc2
     inc [hl]
 .nc2:
-    ld hl, ClassGrowth           ; class growth
-    call ClassRow6
+    ld hl, ClassGrowth
+    call ClassRow10
     ld de, wAttr
-    ld c, 6
+    ld c, NUM_ATTR
 .g:
     ld a, [de]
     add a, [hl]
@@ -617,26 +818,25 @@ CheckLevelUp:
     call SfxWin
     jr CheckLevelUp
 
-; ---- damage ---------------------------------------------------------------------------
-; hl = value -> hl = value * (90..110%)
-Spread:
+; ---- damage pipeline (framework section 38) ----------------------------------------
+Spread:                          ; hl = hl * (90..110%)
     push hl
     srl h
     rr l
     srl h
     rr l
     srl h
-    rr l                         ; hl/8
+    rr l
     push hl
     call Rand
-    pop de                       ; de = v/8
+    pop de
     pop hl
     push de
     srl d
-    rr e                         ; v/16
-    call SubSat                  ; v - v/16
-    pop de                       ; v/8
-    and $0F                      ; 0..15/16 of v/8
+    rr e
+    call SubSat
+    pop de
+    and $0F
     push hl
     ld h, d
     ld l, e
@@ -647,147 +847,185 @@ Spread:
     add hl, de
     ret
 
-; hl = attack, de = defense -> hl = max(atk - def/2, atk/8, 1)
-Mitigate:
+PlayerLevelDE:
+    ld a, [wLevel]
+    ld e, a
+    ld a, [wLevel + 1]
+    ld d, a
+    ret
+
+; does the hero hit wCur? (accuracy vs evasion, clamp 5..95) -> carry = hit
+PlayerHitRoll:
+    call CalcCurMonster
+    ld a, [wCur + E_LVL]
+    ld e, a
+    ld a, [wCur + E_LVL + 1]
+    ld d, a
+    call CalcMonsterExtra
+    ld hl, wACC
+    call LoadW
+    ld a, [wMEVA]
+    ld e, a
+    ld a, [wMEVA + 1]
+    ld d, a
+    call Ratio100
+    ld a, l
+    call Clamp595
+    ld b, a
+    jp Chance
+
+Clamp595:
+    cp 5
+    jr nc, .lo
+    ld a, 5
+.lo:
+    cp 95
+    ret c
+    ld a, 95
+    ret
+
+; hl = raw physical damage vs wCur -> after armor (with penetration), buffs, crit
+PlayerMeleeDamage:
+    ld hl, wATK
+    call LoadW
+    call Spread
+    call OutgoingMods
+    ld a, [wCur + E_FRESH]       ; rogue sneak attack +50% on a fresh foe
+    and a
+    jr z, .nsa
+    ld a, [wClass]
+    cp 1
+    jr nz, .nsa
+    ld a, 50
+    call IncreasePct
+.nsa:
     push hl
-    srl d
-    rr e
-    call SubSat
-    pop de                       ; de = atk
-    srl d
-    rr e
-    srl d
-    rr e
-    srl d
-    rr e
-    call MaxHLDE
+    ld hl, wMDEF                 ; monster armor, reduced by armor pen
+    call LoadW
+    ld a, [wAPen]
+    call ReducePct
+    call PlayerLevelDE
+    call Mitigation
+    pop hl
+    call ReducePct
+    jp RollCrit
+
+OutgoingMods:                    ; power buff +25%, weakness -25%
+    ld a, [wBuffPower]
+    and a
+    jr z, .np
+    ld a, 25
+    call IncreasePct
+.np:
+    ld a, [wDebWeak]
+    and a
+    ret z
+    ld a, 25
+    jp ReducePct
+
+RollCrit:                        ; hl = damage -> maybe + crit damage %
+    xor a
+    ld [wWasCrit], a
+    ld a, [wCrit]
+    ld b, a
+    call Chance
+    jr nc, .min1
+    ld a, 1
+    ld [wWasCrit], a
+    ld a, [wCritDmg]
+    cp 156
+    jr c, .one
+    push af                      ; > 155%: apply in two steps
+    ld a, 100
+    call IncreasePct
+    pop af
+    sub 100
+.one:
+    call IncreasePct
+    push hl
+    ld hl, MsgCrit
+    call SetMsg
+    pop hl
+.min1:
     ld a, h
     or l
     ret nz
     inc l
     ret
 
-; damage vs wCur from the hero's weapon. sets wWasCrit. hl = damage
-PlayerMeleeDamage:
-    call CalcCurMonster
-    ld hl, wATK
-    call LoadW
-    call Spread
-    ld a, [wSurgeT]              ; Action Surge: x2
-    and a
-    jr z, .ns
-    add hl, hl
-    jr nc, .ns
-    ld hl, $FFFF
-.ns:
-    ld a, [wCur + E_FRESH]       ; Rogue sneak attack: +50% on a fresh foe
-    and a
-    jr z, .nsa
-    ld a, [wClass]
-    cp 1
-    jr nz, .nsa
-    ld d, h
-    ld e, l
-    srl d
-    rr e
-    call AddSat
-.nsa:
-    ld a, [wPoison]              ; Poison Blade: +25%
-    and a
-    jr z, .np
-    dec a
-    ld [wPoison], a
-    ld d, h
-    ld e, l
-    srl d
-    rr e
-    srl d
-    rr e
-    call AddSat
-.np:
-    ld a, [wMDEF]
-    ld e, a
-    ld a, [wMDEF + 1]
-    ld d, a
-    call Mitigate
-    ; fall through: crit roll
-RollCrit:                        ; hl = damage -> maybe x crit multiplier
-    xor a
-    ld [wWasCrit], a
-    ld a, [wCrit]
-    ld b, a
-    call Chance
-    ret nc
-    ld a, 1
-    ld [wWasCrit], a
-    srl h
-    rr l
-    srl h
-    rr l
-    srl h
-    rr l
-    ld a, [wCrit8]
-    call MulHL_A
-    push hl
-    ld hl, MsgCrit
-    call SetMsg
-    pop hl
-    ret
-
-; spell damage vs wCur: hl = base power -> hl after DEF/2 mitigation + crit
+; spell damage vs wCur: hl = power -> resist mitigation (magic pen) + crit
 SpellDamage:
     push hl
     call CalcCurMonster
     pop hl
     call Spread
-    ld a, [wMDEF]
-    ld e, a
-    ld a, [wMDEF + 1]
-    ld d, a
-    srl d                        ; magic ignores half of armour
-    rr e
-    call Mitigate
+    call OutgoingMods
+    push hl
+    ld hl, wMDEF                 ; monster resist = armor / 2, minus magic pen
+    call LoadW
+    srl h
+    rr l
+    ld a, [wMPen]
+    call ReducePct
+    call PlayerLevelDE
+    call Mitigation
+    pop hl
+    call ReducePct
     jp RollCrit
 
-; monster in wCur attacks the hero
+; monster in wCur attacks the hero (hit roll, armor, block, crit, on-hit debuff)
 EnemyAttack:
-    ld a, [wDodgeP]              ; dodge
+    call CalcCurMonster
+    ld a, [wCur + E_LVL]
+    ld e, a
+    ld a, [wCur + E_LVL + 1]
+    ld d, a
+    call CalcMonsterExtra
+    ld hl, wMACC                 ; hit chance: monster ACC vs hero EVA
+    call LoadW
+    ld a, [wEVA]
+    ld e, a
+    ld a, [wEVA + 1]
+    ld d, a
+    call Ratio100
+    ld a, l
+    call Clamp595
     ld b, a
     call Chance
-    jr c, .dodged
-    call CalcCurMonster
+    jr nc, .dodged
     ld hl, wMATK
     call LoadW
     call Spread
-    ld a, [wDEF]
-    ld e, a
-    ld a, [wDEF + 1]
-    ld d, a
-    ld a, [wShieldT]             ; Shield spell: +50% DEF
+    ld a, [wDebFrail]            ; frailty: +25% damage taken
     and a
-    jr z, .nsh
+    jr z, .nfr
+    ld a, 25
+    call IncreasePct
+.nfr:
     push hl
-    ld h, d
-    ld l, e
-    srl d
-    rr e
-    call AddSat
-    ld d, h
-    ld e, l
+    ld hl, wDEF
+    call LoadW
+    ld a, [wBuffFort]            ; fortified: +50% armor
+    and a
+    jr z, .nfo
+    ld a, 50
+    call IncreasePct
+.nfo:
+    ld a, [wCur + E_LVL]
+    ld e, a
+    ld a, [wCur + E_LVL + 1]
+    ld d, a
+    call Mitigation
     pop hl
-.nsh:
-    call Mitigate
-    ld a, [wArmFlags]            ; 5% monster crit unless adamantine
+    call ReducePct
+    ld a, [wArmFlags]            ; 5% monster crit (+50%) unless adamantine
     and 4
     jr nz, .nc
     ld b, 5
     call Chance
     jr nc, .nc
-    ld d, h
-    ld e, l
-    srl d
-    rr e
-    call AddSat
+    ld a, 50
+    call IncreasePct
 .nc:
     ld a, [wBlockP]              ; block halves
     ld b, a
@@ -801,6 +1039,9 @@ EnemyAttack:
     pop hl
     call SfxBlock
 .nb:
+    push hl
+    call MonsterOnHit            ; maybe inflict this monster's debuff
+    pop hl
     jp PlayerTakeDamage
 .dodged:
     ld a, 30
@@ -810,8 +1051,7 @@ EnemyAttack:
     call SetMsg
     jp SfxBlock
 
-; hl = damage to the hero
-PlayerTakeDamage:
+PlayerTakeDamage:                ; hl = damage to the hero
     ld a, [wDodge]               ; Uncanny Dodge halves it
     and a
     jr z, .nd
@@ -820,6 +1060,14 @@ PlayerTakeDamage:
     srl h
     rr l
 .nd:
+    call LoseHP
+    ret z
+    ld a, 60
+    ld [wPlayerInv], a
+    call KnockFromCur
+    jp SfxHurt
+
+LoseHP:                          ; hl = damage; z set if the hero died (game over shown)
     ld a, h
     or l
     jr nz, .some
@@ -840,35 +1088,31 @@ PlayerTakeDamage:
     ld [wHP], a
     ld a, h
     ld [wHP + 1], a
-    ld a, 60
-    ld [wPlayerInv], a
-    call KnockFromCur
-    jp SfxHurt
+    or 1
+    ret
 .dead:
     xor a
     ld [wHP], a
     ld [wHP + 1], a
     call SfxHurt
-    jp ShowGameOver
+    call ShowGameOver
+    xor a
+    ret
 
-; hl = HP to restore (capped)
-HealPlayer:
+HealPlayer:                      ; hl = HP to restore (capped)
     ld a, [wHP]
     ld e, a
     ld a, [wHP + 1]
     ld d, a
     call AddSat
-    ld a, l
-    ld [wHP], a
-    ld a, h
-    ld [wHP + 1], a
+    ld de, wHP
+    call StoreW
     ld hl, wHP
     ld de, wMaxHP
     call ClampWord
     jp SfxPickup
 
-; hl = MaxHP * a / 16
-HpFraction:
+HpFraction:                      ; hl = MaxHP * a / 16
     push af
     ld hl, wMaxHP
     call LoadW
@@ -877,7 +1121,7 @@ HpFraction:
     pop af
     jp MulHL_A
 
-HpIsFull:                        ; z if HP == MaxHP
+HpIsFull:
     ld a, [wHP]
     ld b, a
     ld a, [wMaxHP]
@@ -889,8 +1133,7 @@ HpIsFull:                        ; z if HP == MaxHP
     cp b
     ret
 
-; a = MP cost -> carry set if not enough (nothing spent)
-SpendMP:
+SpendMP:                         ; a = cost -> carry if not enough
     ld e, a
     ld a, [wMP]
     sub e
@@ -904,33 +1147,33 @@ SpendMP:
     or a
     ret
 
-; MP regeneration: 1 + MaxMP/64 every second
-MPTick:
-    ld hl, wMPRegenT
-    inc [hl]
-    ld a, [hl]
-    cp 60
-    ret c
-    ld [hl], 0
+MPTick:                          ; MP: 1 + MaxMP/64 per second (+SPI/40)
+    ld a, [wSecTick]
+    and a
+    ret z
     ld hl, wMaxMP
     call LoadW
     ld a, 64
     call DivHL_A
     inc hl
+    push hl
+    ld hl, wSpi
+    ld a, 40
+    call AttrDiv
+    pop de
+    add hl, de
     ld a, [wMP]
     ld e, a
     ld a, [wMP + 1]
     ld d, a
     call AddSat
-    ld a, l
-    ld [wMP], a
-    ld a, h
-    ld [wMP + 1], a
+    ld de, wMP
+    call StoreW
     ld hl, wMP
     ld de, wMaxMP
     jp ClampWord
 
-; ---- HUD:  H12345 M1234 MSG.. L720 ------------------------------------------------------
+; ---- HUD:  H12345 M1234 [msg or effect icons] L720 ----------------------------------
 BuildHUD:
     ld hl, wHudBuf
     ld bc, 20
@@ -960,12 +1203,41 @@ BuildHUD:
     call CopyC
     ld a, [wMsgT]
     and a
-    jr z, .lvl
+    jr z, .icons
     ld hl, wMsgPtr
     call LoadW
     ld de, wHudBuf + 11
     ld c, 5
     call CopyC
+    jr .lvl
+.icons:
+    ld de, wHudBuf + 11          ; up to 5 active effect icons
+    ld hl, EffectIcons
+    ld a, NUM_EFFECTS
+    ld [wTmp], a
+    xor a
+    ld [wTmp + 1], a
+.ic:
+    ld a, [hl+]
+    ld c, a
+    ld a, [hl+]
+    ld b, a                      ; bc = timer address
+    ld a, [bc]
+    and a
+    ld a, [hl+]                  ; icon (flags kept)
+    jr z, .skip
+    ld [de], a
+    inc de
+    ld a, [wTmp + 1]
+    inc a
+    ld [wTmp + 1], a
+    cp 5
+    jr z, .lvl
+.skip:
+    ld a, [wTmp]
+    dec a
+    ld [wTmp], a
+    jr nz, .ic
 .lvl:
     ld a, "L"
     ld [wHudBuf + 16], a
@@ -977,8 +1249,7 @@ BuildHUD:
     ld hl, wNumBuf + 2
     ld de, wHudBuf + 17
     ld c, 3
-    ; fall through
-CopyC:                           ; copy c bytes hl -> de
+CopyC:
     ld a, [hl+]
     ld [de], a
     inc de
@@ -986,10 +1257,290 @@ CopyC:                           ; copy c bytes hl -> de
     jr nz, CopyC
     ret
 
-; ---- character sheet --------------------------------------------------------------------
+; ============================================================================
+;  EFFECTS - buffs / debuffs (framework sections 13-17)
+;  Each effect is a seconds timer; DoTs carry a per-second power.
+;  Stacking: re-applying refreshes to the longer duration (ReplaceStronger).
+;  Debuffs on the hero: status resist may block them, tenacity shortens them.
+; ============================================================================
+DEF FX_SLOW   EQU 1
+DEF FX_WEAK   EQU 2
+DEF FX_FRAIL  EQU 3
+DEF FX_STUN   EQU 4
+DEF FX_BURN   EQU 5
+DEF FX_POISON EQU 6
+
+; timer address + HUD icon, buffs first
+EffectIcons:
+    dw wBuffPower
+    db "P"
+    dw wBuffHaste
+    db "H"
+    dw wBuffFort
+    db "F"
+    dw wBuffRegen
+    db "R"
+    dw wDebStun
+    db "Z"
+    dw wDebSlow
+    db "S"
+    dw wDebWeak
+    db "W"
+    dw wDebFrail
+    db "V"
+    dw wDebBurn
+    db "B"
+    dw wDebPoison
+    db "T"
+DEF NUM_EFFECTS EQU 10
+
+ClearEffects:
+    ld hl, wFxStart
+    ld bc, wFxEnd - wFxStart
+    xor a
+    jp Memset
+
+; per frame: count seconds; once a second tick every timer and DoT/HoT
+EffectsTick:
+    xor a
+    ld [wSecTick], a
+    ld hl, wFrameSec
+    inc [hl]
+    ld a, [hl]
+    cp 60
+    ret c
+    ld [hl], 0
+    ld a, 1
+    ld [wSecTick], a
+    ld a, [wBuffHaste]
+    push af
+    ld hl, wFxStart              ; every timer counts down
+    ld c, wFxTimersEnd - wFxStart
+.t:
+    ld a, [hl]
+    and a
+    jr z, .n
+    dec [hl]
+.n:
+    inc hl
+    dec c
+    jr nz, .t
+    pop af                       ; haste ended: restore swing speed
+    and a
+    jr z, .dots
+    ld a, [wBuffHaste]
+    and a
+    call z, RecalcStats
+.dots:
+    ld a, [wDebBurn]             ; burn / poison tick (ignore armor)
+    and a
+    jr z, .np1
+    ld hl, wBurnPwr
+    call LoadW
+    call LoseHP
+    ret z
+.np1:
+    ld a, [wDebPoison]
+    and a
+    jr z, .np2
+    ld hl, wPoisonPwr
+    call LoadW
+    call LoseHP
+    ret z
+.np2:
+    ld a, [wBuffRegen]           ; regeneration: 1/16 max HP per second
+    and a
+    jr z, .nr
+    ld a, 1
+    call HpFraction
+    call HealQuiet
+.nr:
+    ld hl, wCon                  ; natural regen: CON/50 per second
+    ld a, 50
+    call AttrDiv
+    ld a, h
+    or l
+    ret z
+    jp HealQuiet
+
+HealQuiet:                       ; heal without the pickup sound
+    ld a, [wHP]
+    ld e, a
+    ld a, [wHP + 1]
+    ld d, a
+    call AddSat
+    ld de, wHP
+    call StoreW
+    ld hl, wHP
+    ld de, wMaxHP
+    jp ClampWord
+
+; give the hero a buff: a = seconds, hl = timer address
+GiveBuff:
+    cp [hl]
+    ret c
+    ld [hl], a
+    ret
+
+; inflict a debuff on the hero: a = effect, b = seconds, de = power (DoTs)
+DebuffHero:
+    ld [wTmpFx], a
+    push de
+    push bc
+    ld a, [wSRes]                ; status resist
+    ld b, a
+    call Chance
+    pop bc
+    pop de
+    ret c
+    push de
+    ld a, [wTen]                 ; tenacity shortens it
+    ld c, a
+    ld l, b
+    ld h, 0
+    call ReducePct
+    ld a, l
+    and a
+    jr nz, .ok
+    inc a
+.ok:
+    ld b, a
+    pop de
+    ld a, [wTmpFx]
+    dec a
+    ld hl, DebuffAddrs
+    add a, a
+    add a, l
+    ld l, a
+    jr nc, .nc
+    inc h
+.nc:
+    ld a, [hl+]
+    ld h, [hl]
+    ld l, a
+    ld a, b
+    cp [hl]
+    jr c, .keep
+    ld [hl], a
+.keep:
+    ld a, [wTmpFx]
+    cp FX_BURN
+    jr nz, .nb
+    ld hl, wBurnPwr
+    jr .pw
+.nb:
+    cp FX_POISON
+    ret nz
+    ld hl, wPoisonPwr
+.pw:
+    ld a, e
+    ld [hl+], a
+    ld [hl], d
+    ret
+
+DebuffAddrs: dw wDebSlow, wDebWeak, wDebFrail, wDebStun, wDebBurn, wDebPoison
+
+; monster wCur hit the hero: 25% chance of its signature debuff
+MonsterOnHit:
+    ld a, [wCur + E_TYPE]
+    dec a
+    ld hl, MonsterDebuff
+    add a, l
+    ld l, a
+    jr nc, .nc
+    inc h
+.nc:
+    ld a, [hl]
+    and a
+    ret z
+    ld [wTmpFx], a
+    ld b, 25
+    call Chance
+    ret nc
+    ld hl, wMATK                 ; DoT power = monster ATK / 8
+    call LoadW
+    srl h
+    rr l
+    srl h
+    rr l
+    srl h
+    rr l
+    ld d, h
+    ld e, l
+    ld a, [wTmpFx]
+    ld b, 4                      ; base 4 seconds (stun 1)
+    cp FX_STUN
+    jr nz, .s
+    ld b, 1
+.s:
+    jp DebuffHero
+
+; signature debuff per monster type (0 none)
+; GOBLIN BAT SKEL OGRE WOLF SPIDER LIZARD GNOLL MUMMY FROG ZOMBIE LIZFOLK TOAD WWOLF
+MonsterDebuff: db FX_POISON, 0, FX_FRAIL, FX_STUN, FX_POISON, FX_POISON, 0
+               db FX_POISON, FX_WEAK, FX_SLOW, FX_WEAK, FX_POISON, FX_SLOW, FX_SLOW
+
+; ---- debuffs on monsters (stored in the enemy struct) ---------------------------------
+; a = effect (FX_BURN / FX_POISON / FX_SLOW / FX_STUN), b = seconds, de = DoT power
+DebuffCur:
+    cp FX_STUN
+    jr nz, .ns
+    ld a, b
+    ld [wCur + E_STUN], a
+    ret
+.ns:
+    cp FX_SLOW
+    jr nz, .nsl
+    ld a, b
+    ld [wCur + E_SLOW], a
+    ret
+.nsl:
+    ld a, b
+    ld [wCur + E_DOT], a
+    ld a, e
+    ld [wCur + E_DOTPWR], a
+    ld a, d
+    ld [wCur + E_DOTPWR + 1], a
+    ret
+
+; once a second for wCur: count timers, apply DoT. -> carry if it died
+MonsterEffectsTick:
+    ld a, [wSecTick]
+    and a
+    ret z
+    ld hl, wCur + E_STUN
+    ld a, [hl]
+    and a
+    jr z, .a
+    dec [hl]
+.a:
+    ld hl, wCur + E_SLOW
+    ld a, [hl]
+    and a
+    jr z, .b
+    dec [hl]
+.b:
+    ld hl, wCur + E_DOT
+    ld a, [hl]
+    and a
+    ret z
+    dec [hl]
+    ld a, [wCur + E_DOTPWR]
+    ld l, a
+    ld a, [wCur + E_DOTPWR + 1]
+    ld h, a
+    xor a
+    ld [wHitKX], a
+    ld [wHitKY], a
+    ld [wWasCrit], a
+    jp ApplyDamageCur
+
+; ---- character sheet (2 pages: attributes / combat stats) --------------------------
 OpenStatus:
     ld a, M_STATUS
     ld [wMenu], a
+    xor a
+    ld [wSheetPage], a
     call RecalcStats
     call DrawSheet
     ld a, 7
@@ -999,7 +1550,7 @@ OpenStatus:
     call ShowFresh
     jp ClearOAM
 
-PutWord:                         ; hl -> word, print 5-digit number at b,c
+PutWord:                         ; hl -> word, 5 digits at b,c
     push bc
     call LoadW
     ld d, h
@@ -1009,18 +1560,47 @@ PutWord:                         ; hl -> word, print 5-digit number at b,c
     ld hl, wNumBuf
     jp WinPrint
 
-PutPct:                          ; a = percent at b,c  "nn%"
+PutPct:                          ; a = 0..255 percent "nnn%" at b,c
     push bc
-    call Dec2
+    ld l, a
+    ld h, 0
+    ld d, h
+    ld e, l
+    call Num16ToStr
     pop bc
-    ld a, d
-    call WinPutTile
-    inc b
-    ld a, e
-    call WinPutTile
-    inc b
+    ld hl, wNumBuf + 2
+    call WinPrint
+    ld a, b
+    add a, 3
+    ld b, a
     ld a, "%"
     jp WinPutTile
+
+PutList:                         ; hl -> {db col,row ; dw addr ; db kind}* $FF  kind 0 word, 1 pct
+    ld a, [hl+]
+    cp $FF
+    ret z
+    ld b, a
+    ld a, [hl+]
+    ld c, a
+    ld a, [hl+]
+    ld e, a
+    ld a, [hl+]
+    ld d, a
+    ld a, [hl+]
+    push hl
+    and a
+    jr nz, .pct
+    ld h, d
+    ld l, e
+    call PutWord
+    pop hl
+    jr PutList
+.pct:
+    ld a, [de]
+    call PutPct
+    pop hl
+    jr PutList
 
 DrawSheet:
     call WinClearAll
@@ -1039,171 +1619,232 @@ DrawSheet:
     ld b, 1
     ld c, 1
     call WinPrint
-    ld hl, SheetLabels
-    call WinPrintList
     ld hl, wLevel
     ld b, 14
     ld c, 1
     call PutWord
-    ld hl, wHP
-    ld b, 4
-    ld c, 3
-    call PutWord
-    ld hl, wMaxHP
-    ld b, 10
-    ld c, 3
-    call PutWord
-    ld hl, wMP
-    ld b, 4
-    ld c, 4
-    call PutWord
-    ld hl, wMaxMP
-    ld b, 10
-    ld c, 4
-    call PutWord
-    ld hl, wXP
-    ld b, 4
-    ld c, 5
-    call PutWord
+    ld hl, StrLV
+    ld b, 11
+    ld c, 1
+    call WinPrint
+    ld a, [wSheetPage]
+    and a
+    jr nz, .page2
+    ld hl, Sheet1Labels
+    call WinPrintList
+    ld hl, Sheet1Values
+    call PutList
     call XpNeeded
     ld a, e
     ld [wTmpW], a
     ld a, d
     ld [wTmpW + 1], a
     ld hl, wTmpW
-    ld b, 10
-    ld c, 5
+    ld b, 13
+    ld c, 4
     call PutWord
-    ld hl, wStr
-    ld b, 4
-    ld c, 7
-    call PutWord
-    ld hl, wDex
-    ld b, 14
-    ld c, 7
-    call PutWord
-    ld hl, wVit
-    ld b, 4
-    ld c, 8
-    call PutWord
-    ld hl, wInt
-    ld b, 14
-    ld c, 8
-    call PutWord
-    ld hl, wFth
-    ld b, 4
-    ld c, 9
-    call PutWord
-    ld hl, wLck
-    ld b, 14
-    ld c, 9
-    call PutWord
-    ld hl, wATK
-    ld b, 4
-    ld c, 11
-    call PutWord
-    ld hl, wMAG
-    ld b, 14
-    ld c, 11
-    call PutWord
-    ld hl, wDEF
-    ld b, 4
-    ld c, 12
-    call PutWord
-    ld a, [wCrit]
-    ld b, 15
-    ld c, 12
-    call PutPct
-    ld a, [wDodgeP]
-    ld b, 5
-    ld c, 13
-    call PutPct
-    ld a, [wBlockP]
-    ld b, 15
-    ld c, 13
-    call PutPct
-    ld a, [wCrit8]               ; crit damage % = eighths * 12.5
-    ld l, a
-    ld h, 0
-    ld a, 25
-    call MulHL_A
-    srl h
-    rr l
-    ld a, l
-    ld [wTmpW], a
-    ld a, h
-    ld [wTmpW + 1], a
-    ld hl, wTmpW
-    ld b, 4
-    ld c, 14
-    call PutWord
-    ld a, "%"
-    ld b, 9
-    ld c, 14
-    call WinPutTile
-    ld a, ATTACK_TIME + 1        ; speed rating = 13 - swing frames
-    ld b, a
-    ld a, [wAtkTime]
-    ld c, a
-    ld a, b
-    sub c
-    ld b, 16
-    ld c, 14
-    call WinPutNum2
-    ld hl, wStatPts
-    ld b, 4
-    ld c, 15
-    call PutWord
-    ld hl, wGold
-    ld b, 14
-    ld c, 15
-    call PutWord
-    ld hl, StrSpendHint
+    ld hl, StrSheetHint1
+    ld b, 1
+    ld c, 16
+    jp WinPrint
+.page2:
+    ld hl, Sheet2Labels
+    call WinPrintList
+    ld hl, Sheet2Values
+    call PutList
+    ld hl, StrSheetHint2
     ld b, 1
     ld c, 16
     jp WinPrint
 
-SheetLabels:
-    TXT 11, 1, StrLV
-    TXT 1, 3, StrHP
-    TXT 9, 3, StrSlash
-    TXT 1, 4, StrMP
-    TXT 9, 4, StrSlash
-    TXT 1, 5, StrXPLabel
-    TXT 9, 5, StrSlash
-    TXT 1, 7, StrSTR
-    TXT 11, 7, StrDEX
-    TXT 1, 8, StrVIT
-    TXT 11, 8, StrINT
-    TXT 1, 9, StrFTH
-    TXT 11, 9, StrLCK
-    TXT 1, 11, StrATK
-    TXT 11, 11, StrMAG
-    TXT 1, 12, StrDEF
-    TXT 11, 12, StrCRT
-    TXT 1, 13, StrDGE
-    TXT 11, 13, StrBLK
-    TXT 1, 14, StrCDM
-    TXT 11, 14, StrSPD
-    TXT 1, 15, StrPTS
-    TXT 11, 15, StrGoldL
+Sheet1Labels:
+    TXT 1, 2, StrHP
+    TXT 12, 2, StrSlash
+    TXT 1, 3, StrMP
+    TXT 12, 3, StrSlash
+    TXT 1, 4, StrXPLabel
+    TXT 12, 4, StrSlash
+    TXT 1, 6, StrSTR
+    TXT 10, 6, StrDEX
+    TXT 1, 7, StrCON
+    TXT 10, 7, StrINT
+    TXT 1, 8, StrWIS
+    TXT 10, 8, StrVIT
+    TXT 1, 9, StrSPI
+    TXT 10, 9, StrLCK
+    TXT 1, 10, StrWIL
+    TXT 10, 10, StrCHA
+    TXT 1, 12, StrPTS
+    TXT 1, 13, StrGoldL
     db $FF
-StrMP:  db "MP", $FF
-StrVIT: db "VIT", $FF
-StrFTH: db "FTH", $FF
-StrLCK: db "LCK", $FF
-StrMAG: db "MAG", $FF
-StrDEF: db "DEF", $FF
-StrCRT: db "CRT", $FF
-StrDGE: db "DGE", $FF
-StrBLK: db "BLK", $FF
-StrCDM: db "CDM", $FF
-StrSPD: db "SPD", $FF
-StrPTS: db "PTS", $FF
-StrSpendHint: db "A: SPEND POINTS", $FF
-MsgDodge: db "DODGE"
+Sheet1Values:
+    db 6, 2
+    dw wHP
+    db 0
+    db 13, 2
+    dw wMaxHP
+    db 0
+    db 6, 3
+    dw wMP
+    db 0
+    db 13, 3
+    dw wMaxMP
+    db 0
+    db 6, 4
+    dw wXP
+    db 0
+    db 4, 6
+    dw wStr
+    db 0
+    db 14, 6
+    dw wDex
+    db 0
+    db 4, 7
+    dw wCon
+    db 0
+    db 14, 7
+    dw wInt
+    db 0
+    db 4, 8
+    dw wWis
+    db 0
+    db 14, 8
+    dw wVit
+    db 0
+    db 4, 9
+    dw wSpi
+    db 0
+    db 14, 9
+    dw wLck
+    db 0
+    db 4, 10
+    dw wWil
+    db 0
+    db 14, 10
+    dw wCha
+    db 0
+    db 5, 12
+    dw wStatPts
+    db 0
+    db 5, 13
+    dw wGold
+    db 0
+    db $FF
+Sheet2Labels:
+    TXT 1, 2, StrATK
+    TXT 10, 2, StrMAG
+    TXT 1, 3, StrHEALl
+    TXT 10, 3, StrDEF
+    TXT 1, 4, StrACCl
+    TXT 10, 4, StrEVAl
+    TXT 1, 5, StrRESl
+    TXT 1, 7, StrCRT
+    TXT 10, 7, StrCDM
+    TXT 1, 8, StrBLK
+    TXT 10, 8, StrTENl
+    TXT 1, 9, StrSRSl
+    TXT 10, 9, StrCDRl
+    TXT 1, 10, StrAPNl
+    TXT 10, 10, StrMPNl
+    TXT 1, 11, StrDSCl
+    TXT 10, 11, StrSPD
+    TXT 1, 13, StrEffects
+    db $FF
+Sheet2Values:
+    db 4, 2
+    dw wATK
+    db 0
+    db 14, 2
+    dw wMAG
+    db 0
+    db 4, 3
+    dw wHEAL
+    db 0
+    db 14, 3
+    dw wDEF
+    db 0
+    db 4, 4
+    dw wACC
+    db 0
+    db 14, 4
+    dw wEVA
+    db 0
+    db 4, 5
+    dw wRES
+    db 0
+    db 4, 7
+    dw wCrit
+    db 1
+    db 14, 7
+    dw wCritDmg
+    db 1
+    db 4, 8
+    dw wBlockP
+    db 1
+    db 14, 8
+    dw wTen
+    db 1
+    db 4, 9
+    dw wSRes
+    db 1
+    db 14, 9
+    dw wCDR
+    db 1
+    db 4, 10
+    dw wAPen
+    db 1
+    db 14, 10
+    dw wMPen
+    db 1
+    db 4, 11
+    dw wDiscount
+    db 1
+    db 14, 11
+    dw wSpdRating
+    db 1
+    db $FF
+
+StrMP:   db "MP", $FF
+StrCON:  db "CON", $FF
+StrWIS:  db "WIS", $FF
+StrVIT:  db "VIT", $FF
+StrSPI:  db "SPI", $FF
+StrLCK:  db "LCK", $FF
+StrWIL:  db "WIL", $FF
+StrCHA:  db "CHA", $FF
+StrMAG:  db "MAG", $FF
+StrDEF:  db "ARM", $FF
+StrHEALl: db "HEA", $FF
+StrACCl: db "ACC", $FF
+StrEVAl: db "EVA", $FF
+StrRESl: db "RES", $FF
+StrCRT:  db "CRT", $FF
+StrCDM:  db "CDM", $FF
+StrBLK:  db "BLK", $FF
+StrTENl: db "TEN", $FF
+StrSRSl: db "SRS", $FF
+StrCDRl: db "CDR", $FF
+StrAPNl: db "APN", $FF
+StrMPNl: db "MPN", $FF
+StrDSCl: db "DSC", $FF
+StrSPD:  db "SPD", $FF
+StrPTS:  db "PTS", $FF
+StrEffects: db "EFFECTS ON HUD", $FF
+StrSheetHint1: db "A:SPEND  RIGHT:PG2", $FF
+StrSheetHint2: db "LEFT:PG1  B:BACK", $FF
+MsgDodge: db "MISS!"
 
 MenuStatus:
+    ldh a, [hNewKeys]
+    and $30                      ; left / right: page
+    jr z, .np
+    ld a, [wSheetPage]
+    xor 1
+    ld [wSheetPage], a
+    call SfxMenu
+    call DrawSheet
+    jp ShowFresh
+.np:
     ldh a, [hNewKeys]
     and PAD_A
     jr nz, OpenAlloc
@@ -1213,7 +1854,7 @@ MenuStatus:
     call SfxMenu
     jp ReturnToPause
 
-; ---- spend attribute points ------------------------------------------------------------
+; ---- spend attribute points (10 attributes, one row each) ---------------------------
 OpenAlloc:
     call SfxMenu
     ld a, M_ALLOC
@@ -1227,10 +1868,12 @@ DrawAlloc:
     ld d, 20
     ld e, 18
     call DrawBox
-    ld hl, AllocLabels
-    call WinPrintList
+    ld hl, StrPointsLeft
+    ld b, 1
+    ld c, 1
+    call WinPrint
     ld hl, wStatPts
-    ld b, 11
+    ld b, 9
     ld c, 1
     call PutWord
     ld c, 0
@@ -1240,34 +1883,64 @@ DrawAlloc:
     add a, a
     ld e, a
     ld d, 0
-    ld hl, wAttr
+    ld hl, AttrNames
     add hl, de
+    call LoadW
     ld a, c
-    add a, a
     add a, 3
     ld c, a
-    ld b, 8
+    ld b, 3
+    push bc
+    call WinPrint
+    pop bc
+    pop de
+    push de
+    ld a, e
+    add a, a
+    ld e, a
+    ld d, 0
+    ld hl, wAttr
+    add hl, de
+    ld b, 14
     call PutWord
     pop bc
     inc c
     ld a, c
-    cp 6
+    cp NUM_ATTR
     jr nz, .v
+    ld hl, StrAllocHint1
+    ld b, 1
+    ld c, 15
+    call WinPrint
+    ld hl, StrAllocHint2
+    ld b, 1
+    ld c, 16
+    call WinPrint
     call AllocCursor
     jp ShowFresh
 
-AllocCursor:
-    ld b, 1
+AllocCursor:                     ; single-step cursor, rows 3-12
     ld c, 3
-    ld d, 6
+    ld e, 0
+.l:
     ld a, [wAllocCur]
-    ld e, a
+    cp e
+    ld a, T_BLANK
+    jr nz, .p
     ld a, T_CUR
-    jp DrawListCursor
+.p:
+    ld b, 1
+    call WinPutTile
+    inc c
+    inc e
+    ld a, e
+    cp NUM_ATTR
+    jr nz, .l
+    ret
 
 MenuAlloc:
     ld hl, wAllocCur
-    ld b, 6
+    ld b, NUM_ATTR
     call ListNav
     jp c, AllocCursor
     ldh a, [hNewKeys]
@@ -1288,7 +1961,7 @@ MenuAlloc:
     ld a, [wStatPts + 1]
     or b
     jp z, SfxBlock
-    ld hl, wStatPts              ; spend one point
+    ld hl, wStatPts
     ld a, [hl]
     sub 1
     ld [hl+], a
@@ -1310,23 +1983,17 @@ MenuAlloc:
     call SfxPickup
     jp DrawAlloc
 
-AllocLabels:
-    TXT 1, 1, StrPointsLeft
-    TXT 3, 3, StrSTRl
-    TXT 3, 5, StrDEXl
-    TXT 3, 7, StrVITl
-    TXT 3, 9, StrINTl
-    TXT 3, 11, StrFTHl
-    TXT 3, 13, StrLCKl
-    TXT 1, 15, StrAllocHint1
-    TXT 1, 16, StrAllocHint2
-    db $FF
+AttrNames: dw StrSTRn, StrDEXn, StrCONn, StrINTn, StrWISn, StrVITn, StrSPIn, StrLCKn, StrWILn, StrCHAn
+StrSTRn: db "STRENGTH", $FF
+StrDEXn: db "DEXTERITY", $FF
+StrCONn: db "CONSTITUTION", $FF
+StrINTn: db "INTELLECT", $FF
+StrWISn: db "WISDOM", $FF
+StrVITn: db "VITALITY", $FF
+StrSPIn: db "SPIRIT", $FF
+StrLCKn: db "LUCK", $FF
+StrWILn: db "WILLPOWER", $FF
+StrCHAn: db "CHARISMA", $FF
 StrPointsLeft: db "POINTS:", $FF
-StrSTRl: db "STR", $FF
-StrDEXl: db "DEX", $FF
-StrVITl: db "VIT", $FF
-StrINTl: db "INT", $FF
-StrFTHl: db "FTH", $FF
-StrLCKl: db "LCK", $FF
 StrAllocHint1: db "A: +1 POINT", $FF
 StrAllocHint2: db "B: DONE", $FF

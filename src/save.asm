@@ -4,12 +4,12 @@
 SECTION "Save", ROMX, BANK[1]
 
 DEF SRAM_BASE EQU $A000
-DEF SAVE_VERSION EQU 2
+DEF SAVE_VERSION EQU 3
 
 ; persistent RAM blocks: dw address, db length
 SaveMap:
     dw wLevel
-    db 26
+    db 34
     dw wClass
     db 13
     dw wCharge1
@@ -232,6 +232,7 @@ ContinueGame:
     ld [wPlayerDir], a
     ld a, $FF
     ld [wLoadedZone], a
+    call ClearEffects
     call RecalcStats
     call LoadClassGfx
     call RecalcStats
@@ -293,7 +294,7 @@ DrawSlots:
     call SramOn                  ; class + level from the slot
     call SlotBase
     ld a, l
-    add a, 3 + 26
+    add a, 3 + 34
     ld l, a
     ld a, [hl]
     ld [wTmp], a

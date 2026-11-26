@@ -207,9 +207,7 @@ StrHitDie: db "HIT DIE D", $FF
 StrACl:  db "AC", $FF
 StrSTR:  db "STR", $FF
 StrDEX:  db "DEX", $FF
-StrCON:  db "CON", $FF
 StrINT:  db "INT", $FF
-StrWIS:  db "WIS", $FF
 StrPRF:  db "PRF", $FF
 StrATK:  db "ATK", $FF
 StrDMG:  db "DMG", $FF

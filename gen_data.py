@@ -38,14 +38,14 @@ RANDOM_LOOT = ["DAGGER", "SHORTSWORD", "MACE", "LONGSWORD", "LEATHER", "CHAIN SH
 
 # skills: name, desc1, desc2, kind (0 = charge, recharges on short rest; 1 = spell slot)
 SKILLS = [
-    ("SECOND WIND",   "HEAL 1D10+LEVEL.", "BONUS ACTION.",   0),   # 1
-    ("ACTION SURGE",  "DOUBLE DAMAGE",    "DICE FOR 10S.",   0),   # 2
+    ("SECOND WIND",   "HEAL 25% OF",      "YOUR MAX HP.",    0),   # 1
+    ("ACTION SURGE",  "POWER + HASTE",    "BUFFS FOR 10S.",  0),   # 2
     ("UNCANNY DODGE", "HALVE THE NEXT",   "3 HITS TAKEN.",   0),   # 3
-    ("POISON BLADE",  "NEXT 6 HITS DO",   "+1D4 POISON.",    0),   # 4
-    ("MAGIC MISSILE", "3 DARTS, 1D4+1,",  "NEVER MISS.",     1),   # 5
-    ("SHIELD",        "+5 AC FOR 10S.",   "1ST LEVEL SPELL.", 1),  # 6
-    ("CURE WOUNDS",   "HEAL 1D8+WIS.",    "1ST LEVEL SPELL.", 1),  # 7
-    ("GUIDING BOLT",  "4D6 RADIANT TO",   "NEAREST FOE.",    1),   # 8
+    ("POISON BLADE",  "NEXT 6 HITS",      "POISON FOES.",    0),   # 4
+    ("MAGIC MISSILE", "MAG X2 DAMAGE,",   "NEVER MISSES.",   1),   # 5
+    ("SHIELD",        "FORTIFY: +50%",    "ARMOR FOR 10S.",  1),  # 6
+    ("CURE WOUNDS",   "HEAL + REGEN",     "FOR 8 SECONDS.",  1),  # 7
+    ("GUIDING BOLT",  "MAG X3 RADIANT",   "TO NEAREST FOE.", 1),   # 8
 ]
 # class: name, STR DEX CON INT WIS mods, hit die, weapon, armor, cast mod,
 #        skill1, skill2, B-action (0 melee, 1 fire bolt, 2 sacred flame, 3 dash), desc

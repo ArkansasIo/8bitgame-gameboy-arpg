@@ -1,5 +1,5 @@
 ; ============================================================================
-;  ARPG GB QUEST v0.4.1 (build 20261126) - action RPG for Game Boy Color
+;  ARPG GB QUEST v0.5.0 (build 20261126) - action RPG for Game Boy Color
 ;  Assembler: RGBDS 0.9+   (rgbasm / rgblink / rgbfix)
 ;
 ;  * GBC-enhanced: full color on Game Boy Color / GBA / GBA SP,
@@ -124,7 +124,7 @@ DEF MAX_ITEM     EQU 9
 
 DEF ATTACK_TIME  EQU 12
 DEF MAX_ENEMIES  EQU 4
-DEF ENEMY_SIZE   EQU 16
+DEF ENEMY_SIZE   EQU 32
 DEF ROOM_W       EQU 20
 DEF ROOM_H       EQU 17
 
@@ -195,6 +195,10 @@ DEF E_PAL   EQU 11
 DEF E_HPHI  EQU 12
 DEF E_LVL   EQU 13
 DEF E_FRESH EQU 15
+DEF E_STUN  EQU 16
+DEF E_SLOW  EQU 17
+DEF E_DOT   EQU 18
+DEF E_DOTPWR EQU 19
 
 MACRO TXT                        ; TXT col, row, label
     db \1, \2
@@ -996,6 +1000,10 @@ CheckRoomClear:
 
 ; ============================================================ player =======
 UpdatePlayer:
+    call EffectsTick
+    ld a, [wGameState]
+    cp STATE_PLAY
+    ret nz                       ; a DoT may have ended the run
     call ClassTick
     call MPTick
     ld a, [wMsgT]
@@ -1025,9 +1033,19 @@ UpdatePlayer:
     call PlayerTryMove
     jr .attack
 .input:
+    ld a, [wDebStun]             ; stunned: no input at all
+    and a
+    jp nz, .room
     ld a, [wAttack]
     and a
     jr nz, .attack
+    ld a, [wDebSlow]             ; slowed: move every other frame
+    and a
+    jr z, .notSlow
+    ldh a, [hFrame]
+    and 1
+    jr nz, .attack
+.notSlow:
     ld de, 0
     ldh a, [hKeys]
     ld b, a
@@ -1488,6 +1506,13 @@ UpdateCurEnemy:
     ld a, [wCur + E_TYPE]
     cp NPC_BASE
     ret nc                       ; townsfolk stand still
+    call MonsterEffectsTick      ; DoTs + timers once a second
+    ld a, [wCur + E_TYPE]
+    and a
+    ret z
+    ld a, [wGameState]
+    cp STATE_PLAY
+    ret nz
     ld a, [wCur + E_NOHIT]
     and a
     jr z, .nh
@@ -1509,6 +1534,16 @@ UpdateCurEnemy:
     call EnemyTryMove
     jr .contact
 .ai:
+    ld a, [wCur + E_STUN]        ; stunned monsters do nothing
+    and a
+    jp nz, .contact
+    ld a, [wCur + E_SLOW]        ; slowed: half the moves
+    and a
+    jr z, .fast
+    ldh a, [hFrame]
+    and 1
+    jp nz, .contact
+.fast:
     ld a, [wCur + E_TIMER]
     and a
     jr z, .think
@@ -1576,11 +1611,27 @@ UpdateCurEnemy:
     ret nc
     ld a, ATTACK_TIME
     ld [wCur + E_NOHIT], a       ; one hit per swing
-    ld b, 5                      ; monsters dodge 5%
-    call Chance
-    jr c, .miss
+    call PlayerHitRoll           ; accuracy vs evasion
+    jr nc, .miss
     call PlayerMeleeDamage
     push hl
+    ld a, [wPoison]              ; Poison Blade: poison DoT on the target
+    and a
+    jr z, .noPoison
+    dec a
+    ld [wPoison], a
+    ld hl, wATK
+    call LoadW
+    srl h
+    rr l
+    srl h
+    rr l
+    ld d, h
+    ld e, l
+    ld a, FX_POISON
+    ld b, 4
+    call DebuffCur
+.noPoison:
     ld a, [wPlayerDir]
     add a, a
     ld e, a
@@ -3599,7 +3650,7 @@ TitleList:
     TXT 3, 16, StrCredit
     db $FF
 StrTitle:    db "ARPG GB QUEST", $FF
-StrTagline:  db "VERSION 0.4.1", $FF
+StrTagline:  db "VERSION 0.5.0", $FF
 StrGoal1:    db "FIVE LANDS. FOUR", $FF
 StrGoal2:    db "SEALS. ONE OGRE.", $FF
 StrPress:    db "PRESS START", $FF
@@ -3803,10 +3854,14 @@ wXP:           dw
 wAttr:
 wStr:          dw
 wDex:          dw
-wVit:          dw
+wCon:          dw
 wInt:          dw
-wFth:          dw
+wWis:          dw
+wVit:          dw
+wSpi:          dw
 wLck:          dw
+wWil:          dw
+wCha:          dw
 wStatPts:      dw
 wHP:           dw
 wMaxHP:        dw
@@ -3815,10 +3870,42 @@ wMaxMP:        dw               ; --- end saved block ---
 wATK:          dw
 wMAG:          dw
 wDEF:          dw
+wHEAL:         dw
+wACC:          dw
+wEVA:          dw
+wRES:          dw
+wMACC:         dw
+wMEVA:         dw
 wCrit:         db
-wCrit8:        db
-wDodgeP:       db
+wCritDmg:      db
 wBlockP:       db
+wTen:          db
+wSRes:         db
+wCDR:          db
+wAPen:         db
+wMPen:         db
+wDiscount:     db
+wSpdRating:    db
+wSecTick:      db
+wFrameSec:     db
+wTmpFx:        db
+wSheetPage:    db
+wApplyBurn:    db
+wFxStart:                        ; --- effect timers (seconds) ---
+wBuffPower:    db
+wBuffHaste:    db
+wBuffFort:     db
+wBuffRegen:    db
+wDebSlow:      db
+wDebWeak:      db
+wDebFrail:     db
+wDebStun:      db
+wDebBurn:      db
+wDebPoison:    db
+wFxTimersEnd:
+wBurnPwr:      dw
+wPoisonPwr:    dw
+wFxEnd:
 wAtkTime:      db
 wMPRegenT:     db
 wWpnBase:      db

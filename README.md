@@ -1,6 +1,6 @@
 # ARPG GB QUEST: an action RPG for Game Boy Color
 
-**Version 0.4.1, build 20261126**
+**Version 0.5.0, build 20261126**
 
 A top-down action RPG written in SM83 assembly. It runs on a Game Boy Color, GBA or GBA SP
 in full color, and on an original Game Boy in grayscale. The game uses a 64 KB MBC5
@@ -27,9 +27,11 @@ in Whisperwood, the Sunscar Dunes, Frostfang Reach and Mirefen Marsh, then end t
 | World | Hub town plus 5 zones (16 rooms) with their own tiles, palettes, monsters and bosses; a zone-name banner; the crypt is sealed until all 4 bosses are dead | `gen_world.py`, `game.asm` |
 | Classes | Fighter, Rogue, Wizard and Cleric, each with SRD hit dice, ability modifiers, starting gear, sprite and colors | `src/classes.asm`, `gen_data.py` |
 | Progression | Levels 1-720 for players and monsters; XP curve 15 + 8L + L^2/64; +3 attribute points per level plus class growth | `src/stats.asm` |
-| Attributes | STR, DEX, VIT, INT, FTH, LCK (spend points from the character sheet) | `src/stats.asm` |
-| Sub-stats | Max HP, Max MP, ATK, MAG, DEF, crit %, crit damage (150-300%), dodge %, block %, attack speed | `src/stats.asm` |
-| Combat | Spread (90-110%) damage minus half of defense, crits, dodge, block, MP-based spells, MP regen | `src/stats.asm`, `src/combat.asm` |
+| Attributes | 10 framework attributes: STR, DEX, CON, INT, WIS, VIT, SPI, LCK, WIL, CHA (spend points from the character sheet) | `src/stats.asm` |
+| Sub-stats | HP, MP, attack power, spell power, healing power, accuracy, evasion, armor, resist, crit %, crit damage, block, tenacity, status resist, CDR, armor/magic penetration, merchant discount, speed, HP/MP regen | `src/stats.asm` |
+| Hit and mitigation | Hit chance = ACC/(ACC+EVA), clamped 5-95%; armor mitigation = ARM/(ARM + 10 x attacker level), capped at 70% | `src/stats.asm` |
+| Buffs / debuffs | Buffs: Power, Haste, Fortified, Regen. Debuffs: Stun, Slow, Weakness, Frailty, Burn, Poison. Each monster type has a signature debuff; status resist and tenacity counter them; HUD icons show what's active | `src/stats.asm` |
+| Combat | 90-110% damage spread, armor/resist mitigation with penetration, crits, block, DoTs, MP spells | `src/stats.asm`, `src/combat.asm` |
 | Monster scaling | Each zone has a level band (1-25, 25-100, 100-250, 250-450, 450-720); HP/ATK/DEF/XP scale from SRD templates | `gen_world.py`, `src/stats.asm` |
 | Class features | Second Wind, Action Surge, Sneak Attack, Uncanny Dodge, Poison Blade, Cunning Action dash | `src/combat.asm` |
 | Spells | Fire Bolt and Sacred Flame (projectiles), Magic Missile, Shield, Cure Wounds, Guiding Bolt; spell slots that grow with level | `src/combat.asm` |

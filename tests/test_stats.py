@@ -19,7 +19,7 @@ def shot(name):
     pb.screen.image.convert("RGB").resize((320, 288), 0).save(f"shots/st_{name}.png")
 run(420); shot("0_title"); tap("start", 30); tap("a", 40); tap("a", 30)
 print("L", w("wLevel"), "HP", w("wHP"), "/", w("wMaxHP"), "MP", w("wMP"), "ATK", w("wATK"), "DEF", w("wDEF"),
-      "CRIT", m("wCrit"), "STR", w("wStr"))
+      "CRIT", m("wCrit"), "STR", w("wStr"), "ACC", w("wACC"), "EVA", w("wEVA"))
 shot("1_town_hud")
 setw("wStatPts", 9)
 setm("wPauseCur", 0); tap("start", 20); tap("a", 30); shot("2_sheet")
@@ -30,15 +30,15 @@ tap("b", 20); tap("b", 20)
 setw("wHP", 9999); setw("wMaxHP", 9999)
 setm("wPlayerX", 4); setm("wPlayerY", 56); pb.button_press("left"); run(6); pb.button_release("left"); run(10)
 print("room", m("wRoom"), "monsters (type,lvl,hp):",
-      [(m("wEnemies", i*16), m("wEnemies", i*16+13) + 256*m("wEnemies", i*16+14), m("wEnemies", i*16+3) + 256*m("wEnemies", i*16+12)) for i in range(4)])
+      [(m("wEnemies", i*32), m("wEnemies", i*32+13) + 256*m("wEnemies", i*32+14), m("wEnemies", i*32+3) + 256*m("wEnemies", i*32+12)) for i in range(4)])
 for k in range(400):
     setw("wHP", 9999)
     px, py = m("wPlayerX"), m("wPlayerY")
     best = None
     for i in range(4):
-        t = m("wEnemies", i*16)
+        t = m("wEnemies", i*32)
         if t and t < 16:
-            ex, ey = m("wEnemies", i*16+1), m("wEnemies", i*16+2)
+            ex, ey = m("wEnemies", i*32+1), m("wEnemies", i*32+2)
             d = abs(ex-px) + abs(ey-py)
             if best is None or d < best[0]: best = (d, ex, ey)
     if not best: break
@@ -49,7 +49,8 @@ for k in range(400):
     if k == 20: shot("4_combat")
 print("after fight L", w("wLevel"), "XP", w("wXP"), "pts", w("wStatPts"), "STR", w("wStr"), "MaxHP", w("wMaxHP"))
 # endgame check: jump to level 700 and recompute
-setw("wLevel", 700); setw("wStr", 1500); setw("wVit", 1400); setw("wDex", 800); setw("wLck", 600)
+setw("wLevel", 700); setw("wStr", 1500); setw("wVit", 1400); setw("wDex", 800); setw("wLck", 600); setw("wCon", 1400); setw("wWil", 700)
 setm("wPauseCur", 0); tap("start", 20); tap("a", 30); shot("5_sheet_lv700")
-print("lv700 ATK", w("wATK"), "MaxHP", w("wMaxHP"), "DEF", w("wDEF"), "crit", m("wCrit"), "dodge", m("wDodgeP"), "block", m("wBlockP"))
+print("lv700 ATK", w("wATK"), "MaxHP", w("wMaxHP"), "ARM", w("wDEF"), "ACC", w("wACC"), "EVA", w("wEVA"), "crit", m("wCrit"), "cdm", m("wCritDmg"), "block", m("wBlockP"), "ten", m("wTen"), "sres", m("wSRes"))
+tap("right", 30); shot("6_sheet_page2")
 pb.stop()

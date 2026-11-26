@@ -85,29 +85,29 @@ SkillNames:
 SkillDescs:
     dw StrSkillD0a, StrSkillD0b, StrSkillD1a, StrSkillD1b, StrSkillD2a, StrSkillD2b, StrSkillD3a, StrSkillD3b, StrSkillD4a, StrSkillD4b, StrSkillD5a, StrSkillD5b, StrSkillD6a, StrSkillD6b, StrSkillD7a, StrSkillD7b
 StrSkill0: db "SECOND WIND", $FF
-StrSkillD0a: db "HEAL 1D10+LEVEL.", $FF
-StrSkillD0b: db "BONUS ACTION.", $FF
+StrSkillD0a: db "HEAL 25% OF", $FF
+StrSkillD0b: db "YOUR MAX HP.", $FF
 StrSkill1: db "ACTION SURGE", $FF
-StrSkillD1a: db "DOUBLE DAMAGE", $FF
-StrSkillD1b: db "DICE FOR 10S.", $FF
+StrSkillD1a: db "POWER + HASTE", $FF
+StrSkillD1b: db "BUFFS FOR 10S.", $FF
 StrSkill2: db "UNCANNY DODGE", $FF
 StrSkillD2a: db "HALVE THE NEXT", $FF
 StrSkillD2b: db "3 HITS TAKEN.", $FF
 StrSkill3: db "POISON BLADE", $FF
-StrSkillD3a: db "NEXT 6 HITS DO", $FF
-StrSkillD3b: db "+1D4 POISON.", $FF
+StrSkillD3a: db "NEXT 6 HITS", $FF
+StrSkillD3b: db "POISON FOES.", $FF
 StrSkill4: db "MAGIC MISSILE", $FF
-StrSkillD4a: db "3 DARTS, 1D4+1,", $FF
-StrSkillD4b: db "NEVER MISS.", $FF
+StrSkillD4a: db "MAG X2 DAMAGE,", $FF
+StrSkillD4b: db "NEVER MISSES.", $FF
 StrSkill5: db "SHIELD", $FF
-StrSkillD5a: db "+5 AC FOR 10S.", $FF
-StrSkillD5b: db "1ST LEVEL SPELL.", $FF
+StrSkillD5a: db "FORTIFY: +50%", $FF
+StrSkillD5b: db "ARMOR FOR 10S.", $FF
 StrSkill6: db "CURE WOUNDS", $FF
-StrSkillD6a: db "HEAL 1D8+WIS.", $FF
-StrSkillD6b: db "1ST LEVEL SPELL.", $FF
+StrSkillD6a: db "HEAL + REGEN", $FF
+StrSkillD6b: db "FOR 8 SECONDS.", $FF
 StrSkill7: db "GUIDING BOLT", $FF
-StrSkillD7a: db "4D6 RADIANT TO", $FF
-StrSkillD7b: db "NEAREST FOE.", $FF
+StrSkillD7a: db "MAG X3 RADIANT", $FF
+StrSkillD7b: db "TO NEAREST FOE.", $FF
 ; STR DEX CON INT WIS HD weapon armor castmod skill1 skill2 baction pad*4
 ClassTable:
     db 2, 1, 2, 255, 1, 10, 8, 13, 0, 1, 2, 0, 0, 0, 0, 0

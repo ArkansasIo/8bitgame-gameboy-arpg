@@ -29,7 +29,7 @@ for path, name in [("left", "forest"), ("right", "back"), ("right", "desert"), (
                    ("up", "tundra"), ("down", "back3"), ("down", "swamp"), ("down", "swamp2"),
                    ("down", "swamp3")]:
     go(path); run(20); shot(f"{len(name)}_{name}")
-    print(name, "room", m("wRoom"), "zone", m("wZone"), "enemies", [pb.memory[sym['wEnemies'] + i*16] for i in range(4)])
+    print(name, "room", m("wRoom"), "zone", m("wZone"), "enemies", [pb.memory[sym['wEnemies'] + i*32] for i in range(4)])
 # try sealed crypt (east of swamp3)
 go("right"); run(10); shot("sealed"); print("sealed? room", m("wRoom"))
 setm("wBossFlags", 15); go("right"); run(20); shot("crypt"); print("crypt room", m("wRoom"), "zone", m("wZone"))

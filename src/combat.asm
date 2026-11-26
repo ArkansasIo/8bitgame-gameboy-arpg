@@ -157,6 +157,25 @@ SpellOnSlot:
     ld hl, wTmpW
     call LoadW
     call SpellDamage
+    ld a, [wApplyBurn]
+    and a
+    jr z, .nb
+    push hl
+    xor a
+    ld [wApplyBurn], a
+    ld hl, wMAG                  ; burn: MAG/4 per second for 3 s
+    call LoadW
+    srl h
+    rr l
+    srl h
+    rr l
+    ld d, h
+    ld e, l
+    ld a, FX_BURN
+    ld b, 3
+    call DebuffCur
+    pop hl
+.nb:
     call ApplyDamageCur
 CurToSlot:
     ld a, [wGameState]
@@ -164,6 +183,7 @@ CurToSlot:
     ret z
     ld a, [wTmpSlot]
     swap a
+    add a, a                     ; * ENEMY_SIZE (32)
     ld e, a
     ld d, 0
     ld hl, wEnemies
@@ -177,6 +197,7 @@ CurToSlot:
 SlotToCur:
     ld a, [wTmpSlot]
     swap a
+    add a, a                     ; * ENEMY_SIZE (32)
     ld e, a
     ld d, 0
     ld hl, wEnemies
@@ -349,6 +370,7 @@ UpdateProjectile:
 .l:
     ld a, [wTmpSlot]
     swap a
+    add a, a                     ; * ENEMY_SIZE (32)
     ld e, a
     ld d, 0
     ld hl, wEnemies
@@ -398,12 +420,14 @@ UpdateProjectile:
     rr e
     jr .fire
 .flame:
-    ld a, [wFth]
+    ld a, [wWis]
     ld e, a
-    ld a, [wFth + 1]
+    ld a, [wWis + 1]
     ld d, a
 .fire:
     call AddSat
+    ld a, 1                      ; cantrips set the target burning
+    ld [wApplyBurn], a
     ld a, [wTmpTarget]
     jp SpellOnSlot
 .off:
@@ -731,8 +755,13 @@ FxSecondWind:
     or a
     ret
 FxActionSurge:
-    ld a, 240
-    ld [wSurgeT], a
+    ld a, 10                     ; POWER buff: +25% damage for 10 s
+    ld hl, wBuffPower
+    call GiveBuff
+    ld a, 10
+    ld hl, wBuffHaste            ; and HASTE: faster swings
+    call GiveBuff
+    call RecalcStats
     call SfxWin
     ld hl, StrSurge1
     ld de, StrSurge2
@@ -753,8 +782,9 @@ FxPoison:
     or a
     ret
 FxShield:
-    ld a, 240
-    ld [wShieldT], a
+    ld a, 10                     ; FORTIFIED: +50% armor for 10 s
+    ld hl, wBuffFort
+    call GiveBuff
     call SfxPickup
     ld hl, StrShield1
     ld de, StrShield2
@@ -763,18 +793,18 @@ FxShield:
 FxCure:
     call HpFullCheck
     ret c
-    ld hl, wFth                  ; FTH*3 + 20 + 1/8 max HP
+    ld hl, wHEAL                 ; healing power * 2 + 1/8 max HP, then REGEN 8 s
     call LoadW
-    ld a, 3
-    call MulHL_A
-    ld de, 20
-    call AddSat
+    add hl, hl
     push hl
     ld a, 2
     call HpFraction
     pop de
     call AddSat
     call HealPlayer
+    ld a, 8
+    ld hl, wBuffRegen
+    call GiveBuff
     ld hl, StrCure1
     ld de, StrRecovered
     or a
@@ -835,13 +865,13 @@ StrReady:    db "READY", $FF
 StrUsed:     db "USED", $FF
 StrNoMP:     db "NOT ENOUGH MP.", $FF
 StrSurge1:   db "ACTION SURGE!", $FF
-StrSurge2:   db "DOUBLE DICE.", $FF
+StrSurge2:   db "POWER + HASTE!", $FF
 StrDodge1:   db "YOU READY YOUR", $FF
 StrDodge2:   db "GUARD.", $FF
 StrPoison1:  db "YOUR BLADE DRIPS", $FF
 StrPoison2:  db "WITH POISON.", $FF
 StrShield1:  db "A SHIMMERING", $FF
-StrShield2:  db "WARD. AC +5!", $FF
+StrShield2:  db "WARD: FORTIFIED", $FF
 StrCure1:    db "CURE WOUNDS!", $FF
 StrMissile1: db "MAGIC MISSILE!", $FF
 StrMissile2: db "3 DARTS STRIKE.", $FF

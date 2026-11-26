@@ -12,13 +12,15 @@ Throne and Liberty names, maps or assets.
 - [x] v0.4.1: 5 save slots, load screen, loading screen, boot logo (ARKANSASIO)
 
 ## Next phases
-1. **Framework stats (v0.5):** 10 attributes (STR DEX CON INT WIS VIT SPI LCK WIL CHA),
+- [x] v0.5.0: framework stats + buff/debuff engine
+
+1. ~~**Framework stats (v0.5):** 10 attributes (STR DEX CON INT WIS VIT SPI LCK WIL CHA),
    accuracy/evasion hit chance, armor/resist mitigation, crit chance/damage/resistance,
-   tenacity, CDR, haste, penetration, regen
-2. **Buff/debuff engine (v0.5):** power, haste, shield, fortify, regen, stealth / stun, slow,
-   weakness, frailty, burn, poison, bleed, frostbite. Duration, stacking, refresh, dispel
+   tenacity, CDR, haste, penetration, regen~~ done
+2. ~~**Buff/debuff engine (v0.5):** power, haste, shield, fortify, regen, stealth / stun, slow,
+   weakness, frailty, burn, poison. Duration, stacking, refresh~~ done
 3. **Character creation (v0.6):** 9 races x 18 classes (base sprites + palettes, racial bonuses)
-4. **Gear (v0.6):** 11 slots, 6 rarities (Common to Mythic), item level + power level,
+4. **Gear (v0.6), Diablo IV style:** 11 slots, 6 rarities (Common to Mythic), item level + power level,
    ~420 generated weapons/armor/accessories, set gear with 2/4/6-piece bonuses,
    rings/talismans, smith upgrades +1 to +10, random affixes
 5. **Professions (v0.7):** gathering (mining, herbalism, skinning, fishing) and crafting

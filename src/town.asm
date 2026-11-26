@@ -399,7 +399,17 @@ ShopEntryPrice:                  ; a = item id -> de = price (half when selling)
     ld d, [hl]
     ld a, [wShopMode]
     cp 1
-    ret z
+    jr nz, .sell
+    push hl                      ; buying: charisma discount
+    ld h, d
+    ld l, e
+    ld a, [wDiscount]
+    call ReducePct
+    ld d, h
+    ld e, l
+    pop hl
+    ret
+.sell:
     srl d
     rr e
     ret
