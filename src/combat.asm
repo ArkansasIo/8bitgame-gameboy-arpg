@@ -3,89 +3,23 @@
 ; ============================================================================
 SECTION "Combat", ROMX, BANK[1]
 
-; b = 1 (hit) or 2 (critical: dice doubled) -> a = damage vs wCur
-PlayerDamageRoll:
-    push bc
-    ld a, [wDmgN]
-    ld c, a
-    ld a, b
-    cp 2
-    ld a, c
-    jr nz, .n
-    add a, a
-.n:
-    ld b, a
-    ld a, [wSurgeT]              ; Action Surge: twice the dice
-    and a
-    jr z, .ns
-    sla b
-.ns:
-    ld a, [wDmgS]
-    ld c, a
-    call RollDice
-    ld [wTmpDmg], a
-    ld a, [wWpnFlags]            ; Flame Tongue: +2d6 fire
-    and 2
-    jr z, .nf
-    pop bc
-    push bc
-    ld a, b
-    add a, a
-    ld b, a
-    ld c, 6
-    call RollDice
-    call .add
-.nf:
-    ld a, [wClass]               ; Rogue Sneak Attack: +1d6 on a fresh foe
-    cp 1
-    jr nz, .nsa
-    ld a, [wCur + E_TYPE]
-    call GetTypeStats
-    inc hl
-    ld a, [wCur + E_HP]
-    cp [hl]
-    jr nz, .nsa
-    ld c, 6
-    call RollDie
-    call .add
-.nsa:
-    ld a, [wPoison]              ; Poison Blade: +1d4
-    and a
-    jr z, .np
-    dec a
-    ld [wPoison], a
-    ld c, 4
-    call RollDie
-    call .add
-.np:
-    ld a, [wTmpDmg]
-    ld b, a
-    ld a, [wDmgB]
-    add a, b
-    bit 7, a
-    jr nz, .one
-    and a
-    jr nz, .ok
-.one:
-    ld a, 1
-.ok:
-    pop bc
-    ret
-.add:
-    ld b, a
-    ld a, [wTmpDmg]
-    add a, b
-    ld [wTmpDmg], a
-    ret
-
-; a = damage to wCur (knockback from wHitKX/KY). handles death, XP, loot
+; hl = damage to wCur (knockback from wHitKX/KY). handles death, XP, loot
 ApplyDamageCur:
-    ld b, a
+    xor a
+    ld [wCur + E_FRESH], a
     ld a, [wCur + E_HP]
-    sub b
+    sub l
+    ld e, a
+    ld a, [wCur + E_HPHI]
+    sbc a, h
     jr c, .kill
+    ld d, a
+    or e
     jr z, .kill
+    ld a, e
     ld [wCur + E_HP], a
+    ld a, d
+    ld [wCur + E_HPHI], a
     ld a, 16
     ld [wCur + E_HURT], a
     ld a, [wHitKX]
@@ -99,16 +33,14 @@ ApplyDamageCur:
 .kill:
     ld a, [wCur + E_TYPE]
     call QuestOnKill
+    call CalcCurMonster          ; XP scales with the monster's level
+    ld a, [wMXP]
+    ld e, a
+    ld a, [wMXP + 1]
+    ld d, a
+    call AddXP
     ld a, [wCur + E_TYPE]
     call GetTypeStats
-    push hl
-    ld de, MS_XP
-    add hl, de
-    ld a, [hl+]
-    ld e, a
-    ld d, [hl]
-    call AddXP
-    pop hl
     push hl
     ld de, MS_FLAGS
     add hl, de
@@ -201,29 +133,55 @@ ApplyDamageCur:
     ld [wCur + E_TYPE], a
     jp SfxKill
 
-; a = enemy slot, b = damage: apply outside the enemy update loop
+; a = enemy slot, hl = damage (already final): apply outside the update loop
 DamageSlot:
-    push bc
     ld [wTmpSlot], a
-    swap a                       ; *16
+    ld a, l
+    ld [wTmpW], a
+    ld a, h
+    ld [wTmpW + 1], a
+    call SlotToCur
+    ld hl, wTmpW
+    call LoadW
+    call ApplyDamageCur
+    jr CurToSlot
+
+; a = slot, hl = spell power: mitigated + crit, then applied
+SpellOnSlot:
+    ld [wTmpSlot], a
+    ld a, l
+    ld [wTmpW], a
+    ld a, h
+    ld [wTmpW + 1], a
+    call SlotToCur
+    ld hl, wTmpW
+    call LoadW
+    call SpellDamage
+    call ApplyDamageCur
+CurToSlot:
+    ld a, [wGameState]
+    cp STATE_WIN
+    ret z
+    ld a, [wTmpSlot]
+    swap a
     ld e, a
     ld d, 0
     ld hl, wEnemies
     add hl, de
-    push hl
-    ld de, wCur
-    ld bc, ENEMY_SIZE
-    call Memcpy
-    pop hl
-    pop bc
-    push hl
-    ld a, b
-    call ApplyDamageCur
-    pop de
-    ld a, [wGameState]
-    cp STATE_WIN
-    ret z
+    ld d, h
+    ld e, l
     ld hl, wCur
+    ld bc, ENEMY_SIZE
+    jp Memcpy
+
+SlotToCur:
+    ld a, [wTmpSlot]
+    swap a
+    ld e, a
+    ld d, 0
+    ld hl, wEnemies
+    add hl, de
+    ld de, wCur
     ld bc, ENEMY_SIZE
     jp Memcpy
 
@@ -378,7 +336,7 @@ UpdateProjectile:
     add a, 4
     ld c, a
     call IsSolidAt
-    jr c, .off
+    jp c, .off
     ld a, [wProjX]               ; hit test vs monsters
     ld [wRectA + 0], a
     ld a, [wProjY]
@@ -429,14 +387,25 @@ UpdateProjectile:
     ld a, [wProjDY]
     call Sign
     ld [wHitKY], a
+    ld hl, wMAG                  ; fire bolt: MAG*1.5   sacred flame: MAG+FTH
+    call LoadW
     ld a, [wProjKind]
     cp 2
-    ld c, 10                     ; fire bolt 1d10, sacred flame 1d8
-    jr nz, .die
-    ld c, 8
-.die:
-    ld b, 1
-    jp SpellAttackTarget
+    jr z, .flame
+    ld d, h
+    ld e, l
+    srl d
+    rr e
+    jr .fire
+.flame:
+    ld a, [wFth]
+    ld e, a
+    ld a, [wFth + 1]
+    ld d, a
+.fire:
+    call AddSat
+    ld a, [wTmpTarget]
+    jp SpellOnSlot
 .off:
     xor a
     ld [wProjOn], a
@@ -450,48 +419,6 @@ Sign:                            ; a signed -> -1 / 0 / +1
     ret z
     ld a, $FF
     ret
-
-; spell attack roll vs wTmpTarget: b = dice count, c = sides
-SpellAttackTarget:
-    push bc
-    ld a, [wTmpTarget]
-    swap a
-    ld e, a
-    ld d, 0
-    ld hl, wEnemies
-    add hl, de
-    ld a, [hl]
-    call GetTypeStats
-    pop bc
-    xor a
-    ld [wWasCrit], a
-    push bc
-    ld c, 20
-    call RollDie
-    pop bc
-    cp 1
-    jr z, .miss
-    cp 20
-    jr nz, .roll
-    ld a, 1
-    ld [wWasCrit], a
-    sla b                        ; crit: double dice
-    jr .hit
-.roll:
-    ld d, a
-    ld a, [wSpellAtk]
-    add a, d
-    cp [hl]
-    jr c, .miss
-.hit:
-    call RollDice
-    ld b, a
-    ld a, [wTmpTarget]
-    jp DamageSlot
-.miss:
-    ld hl, MsgMiss
-    call SetMsg
-    jp SfxBlock
 
 DrawProjectile:
     ld a, [wProjOn]
@@ -561,26 +488,22 @@ DrawSkills:
     ld c, 5
     ld e, 1
     call PutCharge
-    ld a, [wMaxSlots]            ; SLOTS n/m for casters
-    and a
-    jr z, .noSlots
-    ld hl, StrSlots
+    ld hl, StrMP                 ; MP cur / max
     ld b, 2
     ld c, 10
     call WinPrint
-    ld a, [wSlots]
-    add a, T_DIGIT0
-    ld b, 8
+    ld hl, wMP
+    ld b, 5
+    ld c, 10
+    call PutWord
+    ld a, "/"
+    ld b, 10
     ld c, 10
     call WinPutTile
-    ld a, "/"
-    inc b
-    call WinPutTile
-    ld a, [wMaxSlots]
-    add a, T_DIGIT0
-    inc b
-    call WinPutTile
-.noSlots:
+    ld hl, wMaxMP
+    ld b, 11
+    ld c, 10
+    call PutWord
     call SkillCursorDesc
     ret
 
@@ -604,10 +527,20 @@ PutCharge:                       ; a = charge, e = which skill (0/1)
     jr z, .s
     ld a, [wSkill2]
 .s:
+    push af
+    call SkillCost
+    ld [wTmpCount], a
+    pop af
     call SkillKind
     pop de
     and a
-    ret nz                       ; spell: shown as slots
+    jr z, .charge
+    ld hl, StrMP                 ; spell: "MP nn"
+    call WinPrint
+    ld a, [wTmpCount]
+    ld b, 18
+    jp WinPutNum2
+.charge:
     ld a, d
     and a
     ld hl, StrReady
@@ -616,7 +549,19 @@ PutCharge:                       ; a = charge, e = which skill (0/1)
 .p:
     jp WinPrint
 
-SkillKind:                       ; a = skill id -> a = kind (0 charge, 1 slot)
+SkillCost:                       ; a = skill id -> a = MP cost
+    dec a
+    ld hl, SkillMPCost
+    add a, l
+    ld l, a
+    jr nc, .nc
+    inc h
+.nc:
+    ld a, [hl]
+    ret
+SkillMPCost: db 0, 0, 0, 0, 15, 10, 12, 20
+
+SkillKind:                       ; a = skill id -> a = kind (0 charge, 1 MP)
     dec a
     ld hl, SkillKinds
     add a, l
@@ -704,35 +649,54 @@ MenuSkills:
     call SkillKind
     pop hl
     and a
-    jr z, .charge
-    ld hl, wSlots
-.charge:
-    ld a, [hl]
+    jr nz, .mp
+    ld a, [hl]                   ; class charge
     and a
-    jr nz, .pay
-    ld hl, StrNoUses
-    ld de, StrRestHint
-    jr .msg
-.pay:
-    ld a, l
-    ld [wCostPtr], a
-    ld a, h
-    ld [wCostPtr + 1], a
-    ld a, [wTmpSkill]
+    jr z, .none
+    push hl
+    call .run
+    pop bc
+    jr c, .msg
+    ld a, [bc]
     dec a
-    ld hl, SkillEffects
-    call JumpTableCall           ; carry set = could not use (keeps the charge)
+    ld [bc], a
+    jr .msg
+.mp:
+    ld a, [wTmpSkill]
+    call SkillCost
+    ld b, a
+    ld a, [wMP + 1]
+    and a
+    jr nz, .enough
+    ld a, [wMP]
+    cp b
+    jr c, .noMP
+.enough:
+    call .run
     jr c, .msg
     push hl
-    ld hl, wCostPtr
-    ld a, [hl+]
-    ld h, [hl]
-    ld l, a
-    dec [hl]
+    push de
+    ld a, [wTmpSkill]
+    call SkillCost
+    call SpendMP
+    pop de
     pop hl
+    jr .msg
+.noMP:
+    ld hl, StrNoMP
+    ld de, StrEmpty
+    jr .msg
+.none:
+    ld hl, StrNoUses
+    ld de, StrRestHint
 .msg:
     ld bc, BackToSkills
     jp ShowPanelMsg
+.run:
+    ld a, [wTmpSkill]
+    dec a
+    ld hl, SkillEffects
+    jp JumpTableCall
 
 BackToSkills:
     ld a, M_SKILLS
@@ -759,11 +723,8 @@ SkillEffects:
 FxSecondWind:
     call HpFullCheck
     ret c
-    ld c, 10
-    call RollDie
-    ld b, a
-    ld a, [wLevel]
-    add a, b
+    ld a, 4                      ; 25% of max HP
+    call HpFraction
     call HealPlayer
     ld hl, StrSecondWind
     ld de, StrRecovered
@@ -802,11 +763,17 @@ FxShield:
 FxCure:
     call HpFullCheck
     ret c
-    ld c, 8
-    call RollDie
-    ld b, a
-    ld a, [wWIS]
-    add a, b
+    ld hl, wFth                  ; FTH*3 + 20 + 1/8 max HP
+    call LoadW
+    ld a, 3
+    call MulHL_A
+    ld de, 20
+    call AddSat
+    push hl
+    ld a, 2
+    call HpFraction
+    pop de
+    call AddSat
     call HealPlayer
     ld hl, StrCure1
     ld de, StrRecovered
@@ -821,11 +788,9 @@ FxMissile:
     ld [wWasCrit], a
     ld [wHitKX], a
     ld [wHitKY], a
-    ld b, 3                      ; 3 darts of 1d4+1, auto-hit
-    ld c, 4
-    call RollDice
-    add a, 3
-    ld b, a
+    ld hl, wMAG                  ; 3 darts: MAG*2, ignores armour
+    call LoadW
+    add hl, hl
     ld a, [wTmpTarget]
     call DamageSlot
     ld hl, StrMissile1
@@ -840,9 +805,12 @@ FxGuiding:
     xor a
     ld [wHitKX], a
     ld [wHitKY], a
-    ld b, 4                      ; 4d6 radiant, spell attack roll
-    ld c, 6
-    call SpellAttackTarget
+    ld hl, wMAG                  ; MAG*3 radiant
+    call LoadW
+    ld a, 3
+    call MulHL_A
+    ld a, [wTmpTarget]
+    call SpellOnSlot
     ld hl, StrGuiding1
     ld de, StrEmpty
     or a
@@ -854,19 +822,18 @@ NoTarget:
     ret
 
 HpFullCheck:                     ; carry + message if HP is already full
-    ld a, [wMaxHP]
-    ld b, a
-    ld a, [wHP]
-    cp b
-    ccf
+    call HpIsFull
     ld hl, StrHpFull
     ld de, StrEmpty
+    scf
+    ret z
+    or a
     ret
 
 StrSkillsT:  db "SKILLS + SPELLS", $FF
 StrReady:    db "READY", $FF
 StrUsed:     db "USED", $FF
-StrSlots:    db "SLOTS", $FF
+StrNoMP:     db "NOT ENOUGH MP.", $FF
 StrSurge1:   db "ACTION SURGE!", $FF
 StrSurge2:   db "DOUBLE DICE.", $FF
 StrDodge1:   db "YOU READY YOUR", $FF

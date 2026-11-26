@@ -6,7 +6,7 @@ for line in open("game.sym"):
     p = line.split()
     if len(p) == 2 and ":" in p[0]:
         sym[p[1]] = int(p[0].split(":")[1], 16)
-pb = PyBoy("dungeon_quest.gb", window="null", sound_emulated=False, cgb=True)
+pb = PyBoy("arpg_gb_quest.gb", window="null", sound_emulated=False, cgb=True)
 pb.set_emulation_speed(0)
 m = lambda n, o=0: pb.memory[sym[n] + o]
 def setm(n, v, o=0): pb.memory[sym[n] + o] = v

@@ -56,6 +56,10 @@ ZONE_MON = {
     5: (["SKELETON", "GIANT BAT", "ZOMBIE"], "OGRE"),
 }
 
+# zone level bands (levels 1-720)
+ZONE_LV = {0: (1, 1), 1: (1, 25), 2: (25, 100), 3: (100, 250), 4: (250, 450), 5: (450, 720)}
+ZONE_SHORT = ["OAKHOLLOW", "WHISPERWOOD", "SUNSCAR", "FROSTFANG", "MIREFEN", "OLD CRYPT"]
+
 # ---------------------------------------------------------------- world ---
 # room: (name/zone, grid x, grid y, flags)  flags: 1 town(safe), 2 boss, 4 locked
 ROOMS = [(0, 3, 3, 1)]
@@ -233,6 +237,21 @@ L.append("ZoneNames:")
 L.append("    dw " + ", ".join(f"StrZone{i}" for i in range(len(ZONES))))
 for i, z in enumerate(ZONES):
     L.append(f"StrZone{i}: db {s(z)}")
+L.append("; base monster level per room (bosses use it exactly)")
+L.append("RoomLevels:")
+lv=[]
+for i, (zone, x, y, flags) in enumerate(ROOMS):
+    lo, hi = ZONE_LV[zone]
+    k = [j for j, r in enumerate(ROOMS) if r[0] == zone].index(i)
+    lv.append(hi if flags & 2 else lo + (hi - lo) * k // 3)
+L.append("    dw " + ", ".join(str(v) for v in lv))
+L.append("ZoneBanners:")
+L.append("    dw " + ", ".join(f"StrBanner{i}" for i in range(len(ZONES))))
+for i, z in enumerate(ZONE_SHORT):
+    lo, hi = ZONE_LV[i]
+    t = z if i == 0 else f"{z} {lo}-{hi}"
+    assert len(t) <= 18, t
+    L.append(f"StrBanner{i}: db {s(t)}")
 L.append("MonsterNames:")
 L.append("    dw " + ", ".join(f"StrMon{i}" for i in range(len(M))))
 for i, m in enumerate(M):

@@ -374,6 +374,17 @@ StrZone2: db "SUNSCAR DUNES", $FF
 StrZone3: db "FROSTFANG REACH", $FF
 StrZone4: db "MIREFEN MARSH", $FF
 StrZone5: db "THE OLD CRYPT", $FF
+; base monster level per room (bosses use it exactly)
+RoomLevels:
+    dw 1, 1, 9, 25, 25, 50, 100, 100, 150, 250, 250, 316, 450, 450, 540, 720
+ZoneBanners:
+    dw StrBanner0, StrBanner1, StrBanner2, StrBanner3, StrBanner4, StrBanner5
+StrBanner0: db "OAKHOLLOW", $FF
+StrBanner1: db "WHISPERWOOD 1-25", $FF
+StrBanner2: db "SUNSCAR 25-100", $FF
+StrBanner3: db "FROSTFANG 100-250", $FF
+StrBanner4: db "MIREFEN 250-450", $FF
+StrBanner5: db "OLD CRYPT 450-720", $FF
 MonsterNames:
     dw StrMon0, StrMon1, StrMon2, StrMon3, StrMon4, StrMon5, StrMon6, StrMon7, StrMon8, StrMon9, StrMon10, StrMon11, StrMon12, StrMon13
 StrMon0: db "GOBLIN", $FF

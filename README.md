@@ -1,4 +1,6 @@
-# Dungeon Quest: a Game Boy Color action RPG with D&D 5e rules
+# ARPG GB QUEST: an action RPG for Game Boy Color
+
+**Version 0.4.0, build 20261126**
 
 A top-down action RPG written in SM83 assembly. It runs on a Game Boy Color, GBA or GBA SP
 in full color, and on an original Game Boy in grayscale. The game uses a 64 KB MBC5
@@ -24,10 +26,13 @@ in Whisperwood, the Sunscar Dunes, Frostfang Reach and Mirefen Marsh, then end t
 |---|---|---|
 | World | Hub town plus 5 zones (16 rooms) with their own tiles, palettes, monsters and bosses; a zone-name banner; the crypt is sealed until all 4 bosses are dead | `gen_world.py`, `game.asm` |
 | Classes | Fighter, Rogue, Wizard and Cleric, each with SRD hit dice, ability modifiers, starting gear, sprite and colors | `src/classes.asm`, `gen_data.py` |
-| Combat (5e) | d20 + attack bonus against AC; natural 1 / natural 20; crits double the dice; monsters roll against your AC | `game.asm`, `src/combat.asm` |
+| Progression | Levels 1-720 for players and monsters; XP curve 15 + 8L + L^2/64; +3 attribute points per level plus class growth | `src/stats.asm` |
+| Attributes | STR, DEX, VIT, INT, FTH, LCK (spend points from the character sheet) | `src/stats.asm` |
+| Sub-stats | Max HP, Max MP, ATK, MAG, DEF, crit %, crit damage (150-300%), dodge %, block %, attack speed | `src/stats.asm` |
+| Combat | Spread (90-110%) damage minus half of defense, crits, dodge, block, MP-based spells, MP regen | `src/stats.asm`, `src/combat.asm` |
+| Monster scaling | Each zone has a level band (1-25, 25-100, 100-250, 250-450, 450-720); HP/ATK/DEF/XP scale from SRD templates | `gen_world.py`, `src/stats.asm` |
 | Class features | Second Wind, Action Surge, Sneak Attack, Uncanny Dodge, Poison Blade, Cunning Action dash | `src/combat.asm` |
 | Spells | Fire Bolt and Sacred Flame (projectiles), Magic Missile, Shield, Cure Wounds, Guiding Bolt; spell slots that grow with level | `src/combat.asm` |
-| Progression | XP at the 5e thresholds (300 / 900 / 2700 / 6500); each level adds hit die + CON to HP, and proficiency rises at level 5 | `game.asm`, `src/classes.asm` |
 | Loot | Diablo-style rarity tiers (Common / Magic / Rare / Legendary), gold drops, random gear drops, and a unique item from each boss (Flame Tongue, Adamantine armor, ...) | `src/combat.asm`, `gen_data.py` |
 | Inventory | 10-slot bag; potions stack; equip or toss; stats recalculated on equip | `src/inventory.asm` |
 | Town | Talk to NPCs, dialogue boxes, a merchant to buy and sell, an inn to rest (long rest) | `src/town.asm` |
@@ -40,12 +45,13 @@ in Whisperwood, the Sunscar Dunes, Frostfang Reach and Mirefen Marsh, then end t
 make            # needs RGBDS 0.9+ (https://rgbds.gbdev.io) and Python 3
 ```
 The generators (`gen_gfx.py`, `gen_world.py`, `gen_data.py`) rebuild the `.inc` data files
-automatically when you change them. Play `dungeon_quest.gb` in mGBA, SameBoy, BGB or
+automatically when you change them. Play `arpg_gb_quest.gb` in mGBA, SameBoy, BGB or
 Emulicious, or on a flash cart.
 
 ## Files
 ```
 game.asm         engine: boot, banks, rendering, window menus, rooms, player, enemies, HUD, sound
+src/stats.asm    levels 1-720, attributes, sub-stats, damage formulas, HUD, sheet
 src/classes.asm  class select, ability scores, derived stats, character sheet
 src/combat.asm   damage rolls, kills + loot, projectiles, skills and spells
 src/inventory.asm bag, equipment, rarity display, potions

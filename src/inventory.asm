@@ -521,29 +521,36 @@ MenuItemSub:
     ld de, StrEmpty
     jr .msg
 .use:                            ; potions
-    ld a, [wMaxHP]
-    ld b, a
-    ld a, [wHP]
-    cp b
+    call HpIsFull
     ld hl, StrHpFull
     ld de, StrEmpty
-    jr nc, .msg
+    jr z, .msg
     ld a, [wTmpItem]
     call GetItem
     ld de, 4
     add hl, de
     ld a, [hl+]
     and a
-    jr z, .dice
-    ld a, 99
+    jr z, .part
+    ld hl, $FFFF                 ; elixir: everything
     jr .heal
-.dice:
-    ld a, [hl+]
+.part:
+    ld a, [hl+]                  ; p2*2 sixteenths of max HP + p4*10
+    add a, a
+    inc hl
+    ld b, [hl]
+    push bc
+    call HpFraction
+    pop bc
+    ld a, b
+    add a, a
     ld b, a
-    ld a, [hl+]
-    ld c, a
-    call RollDice
-    add a, [hl]
+    add a, a
+    add a, a
+    add a, b                     ; *10
+    ld e, a
+    ld d, 0
+    call AddSat
 .heal:
     call HealPlayer
     ld a, [wInvCur]
@@ -583,23 +590,6 @@ ShowPanelMsg:
     ld b, 1
     ld c, 16
     jp WinPrint
-
-HealPlayer:                      ; a = amount (capped at max HP)
-    ld b, a
-    ld a, [wHP]
-    add a, b
-    jr c, .cap
-    ld b, a
-    ld a, [wMaxHP]
-    cp b
-    jr c, .cap
-    ld a, b
-    ld [wHP], a
-    jp SfxPickup
-.cap:
-    ld a, [wMaxHP]
-    ld [wHP], a
-    jp SfxPickup
 
 StrBag:       db "BAG", $FF
 StrEmptyBag:  db "EMPTY", $FF

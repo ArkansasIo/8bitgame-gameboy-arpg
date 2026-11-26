@@ -4,18 +4,16 @@
 SECTION "Save", ROMX, BANK[1]
 
 DEF SRAM_BASE EQU $A000
-DEF SAVE_VERSION EQU 1
+DEF SAVE_VERSION EQU 2
 
 ; persistent RAM blocks: dw address, db length
 SaveMap:
-    dw wHP
-    db 2
     dw wLevel
-    db 3
+    db 26
     dw wClass
     db 13
-    dw wSlots
-    db 4
+    dw wCharge1
+    db 2
     dw wRoom
     db 3
     dw wBossFlags
@@ -198,6 +196,7 @@ ContinueGame:
     ld [wLoadedZone], a
     call RecalcStats
     call LoadClassGfx
+    call RecalcStats
     ld a, STATE_PLAY
     ld [wGameState], a
     call BuildHUD

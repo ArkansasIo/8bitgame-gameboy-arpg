@@ -236,11 +236,8 @@ MenuInn:
     ld de, 0
     jp OpenDialog
 
-LongRest:                        ; full HP, spell slots, class charges
-    ld a, [wMaxHP]
-    ld [wHP], a
-    ld a, [wMaxSlots]
-    ld [wSlots], a
+LongRest:                        ; full HP / MP, class charges
+    call FullRestore
     ld a, 1
     ld [wCharge1], a
     ld [wCharge2], a

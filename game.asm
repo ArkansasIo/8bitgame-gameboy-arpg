@@ -1,5 +1,5 @@
 ; ============================================================================
-;  DUNGEON QUEST - a tiny action RPG for Game Boy / Game Boy Color
+;  ARPG GB QUEST v0.4.0 (build 20261126) - action RPG for Game Boy Color
 ;  Assembler: RGBDS 0.9+   (rgbasm / rgblink / rgbfix)
 ;
 ;  * GBC-enhanced: full color on Game Boy Color / GBA / GBA SP,
@@ -105,6 +105,7 @@ DEF M_INN       EQU 14
 DEF M_DIALOG    EQU 15
 DEF M_QUESTS    EQU 16
 DEF M_SAVEASK   EQU 17
+DEF M_ALLOC     EQU 18
 DEF INV_SLOTS   EQU 10
 
 DEF DIR_DOWN   EQU 0
@@ -191,6 +192,9 @@ DEF E_KX    EQU 8
 DEF E_KY    EQU 9
 DEF E_NOHIT EQU 10
 DEF E_PAL   EQU 11
+DEF E_HPHI  EQU 12
+DEF E_LVL   EQU 13
+DEF E_FRESH EQU 15
 
 MACRO TXT                        ; TXT col, row, label
     db \1, \2
@@ -724,9 +728,14 @@ LoadRoom:
     ld [wCur + E_TYPE], a
     jr .empty
 .alive:
-    inc hl
-    ld a, [hl]                   ; MS_HP
+    call SpawnLevel              ; level from the room's band
+    call CalcCurMonster
+    ld a, [wMHP]
     ld [wCur + E_HP], a
+    ld a, [wMHP + 1]
+    ld [wCur + E_HPHI], a
+    ld a, 1
+    ld [wCur + E_FRESH], a
     ld a, 30
     ld [wCur + E_TIMER], a
     ld a, [wCur + E_TYPE]
@@ -743,6 +752,32 @@ LoadRoom:
     dec c
     jr nz, .spawn
     jp LCDOn
+
+SpawnLevel:                      ; wCur level = room level (+0..3 unless boss)
+    ld a, [wRoom]
+    add a, a
+    ld e, a
+    ld d, 0
+    ld hl, RoomLevels
+    add hl, de
+    ld a, [hl+]
+    ld h, [hl]
+    ld l, a
+    ld a, [wCur + E_PAL]
+    cp 7                         ; palette 7 = boss slot: exact level
+    jr z, .set
+    call Rand
+    and 3
+    add a, l
+    ld l, a
+    jr nc, .set
+    inc h
+.set:
+    ld a, l
+    ld [wCur + E_LVL], a
+    ld a, h
+    ld [wCur + E_LVL + 1], a
+    ret
 
 GetRoomInfo:                     ; hl = RoomInfo + room * 8 (clobbers de)
     ld a, [wRoom]
@@ -861,6 +896,7 @@ CheckRoomClear:
 ; ============================================================ player =======
 UpdatePlayer:
     call ClassTick
+    call MPTick
     ld a, [wMsgT]
     and a
     jr z, .noMsg
@@ -945,7 +981,7 @@ UpdatePlayer:
     ld a, [wAttack]
     and a
     jr nz, .noNewAttack
-    ld a, ATTACK_TIME
+    ld a, [wAtkTime]
     ld [wAttack], a
     call SfxSwing
     jr .room
@@ -1032,7 +1068,7 @@ UpdatePlayer:
     add a, a
     ld e, a
     ld d, 0
-    ld hl, ZoneNames
+    ld hl, ZoneBanners
     add hl, de
     ld a, [hl+]
     ld h, [hl]
@@ -1134,150 +1170,6 @@ KnockFromCur:                    ; push the player away from wCur
     ld a, 8
     ld [wKnockT], a
     ret
-
-; --- monster makes an attack roll against the fighter (5e) ---------------
-EnemyAttack:
-    ld a, [wCur + E_TYPE]
-    call GetTypeStats
-    ld c, 20
-    call RollDie
-    cp 1
-    jr z, .miss                  ; natural 1 always misses
-    ld b, 0
-    cp 20
-    jr nz, .notCrit
-    ld a, [wArmFlags]            ; adamantine: no critical hits
-    and 4
-    jr nz, .crit0
-    ld b, 1                      ; natural 20: hit + double dice
-.crit0:
-    ld a, 20
-.notCrit:
-    ld d, a
-    inc hl
-    inc hl                       ; MS_ATK
-    ld a, b
-    and a
-    jr nz, .hit
-    ld a, [hl]
-    add a, d
-    ld c, a
-    call GetPlayerAC
-    ld e, a
-    ld a, c
-    cp e
-    jr c, .miss
-.hit:
-    inc hl
-    ld a, [hl+]                  ; dice count
-    ld e, a
-    ld a, b
-    and a
-    ld a, e
-    jr z, .nd
-    add a, a
-.nd:
-    ld b, a
-    ld a, [hl+]                  ; dice sides
-    ld c, a
-    ld a, [hl]                   ; bonus
-    ld e, a
-    call RollDice
-    add a, e
-    jp PlayerTakeDamage
-.miss:
-    ld a, 30
-    ld [wPlayerInv], a
-    call KnockFromCur
-    ld hl, MsgBlock
-    call SetMsg
-    jp SfxBlock
-
-PlayerTakeDamage:                ; a = damage
-    ld b, a
-    ld a, [wDodge]               ; Uncanny Dodge halves it
-    and a
-    jr z, .nd
-    dec a
-    ld [wDodge], a
-    srl b
-    jr nz, .nd
-    inc b
-.nd:
-    ld a, [wHP]
-    sub b
-    jr c, .dead
-    jr z, .dead
-    ld [wHP], a
-    ld a, 60
-    ld [wPlayerInv], a
-    call KnockFromCur
-    jp SfxHurt
-.dead:
-    xor a
-    ld [wHP], a
-    call SfxHurt
-    jp ShowGameOver
-
-; de = XP to add
-AddXP:
-    ld hl, wXP
-    ld a, [hl]
-    add a, e
-    ld [hl+], a
-    ld a, [hl]
-    adc a, d
-    ld [hl], a
-CheckLevelUp:
-    ld a, [wLevel]
-    cp MAX_LEVEL
-    ret nc
-    dec a
-    add a, a
-    ld e, a
-    ld d, 0
-    ld hl, LevelTable
-    add hl, de
-    ld a, [hl+]
-    ld e, a
-    ld d, [hl]
-    ld a, [wXP]
-    sub e
-    ld a, [wXP + 1]
-    sbc a, d
-    ret c
-    ld hl, wLevel
-    inc [hl]
-    ld a, [wHD]                  ; class hit die + CON
-    ld c, a
-    call RollDie
-    ld b, a
-    ld a, [wCON]
-    add a, b
-    ld b, a
-    ld a, [wMaxSlots]            ; casters gain a slot
-    and a
-    jr z, .noSlot
-    cp 5
-    jr nc, .noSlot
-    inc a
-    ld [wMaxSlots], a
-    ld hl, wSlots
-    inc [hl]
-.noSlot:
-    push bc
-    call RecalcStats
-    pop bc
-    ld a, [wMaxHP]
-    add a, b
-    ld [wMaxHP], a
-    ld a, [wHP]
-    add a, b
-    ld [wHP], a
-    ld hl, MsgLvUp
-    call SetMsg
-    call SfxWin
-    jr CheckLevelUp
 
 SetMsg:                          ; hl = 5-char HUD message
     ld a, l
@@ -1581,35 +1473,13 @@ UpdateCurEnemy:
     call SetEnemyRectB
     call RectOverlap
     ret nc
-    ; --- the fighter's attack roll: d20 + 4 vs monster AC --------------
     ld a, ATTACK_TIME
-    ld [wCur + E_NOHIT], a       ; one roll per swing
-    xor a
-    ld [wWasCrit], a
-    ld a, [wCur + E_TYPE]
-    call GetTypeStats
-    ld c, 20
-    call RollDie
-    cp 1
-    jr z, .miss
-    cp 20
-    jr z, .crit
-    ld b, a
-    ld a, [wAtk]
-    add a, b
-    cp [hl]                      ; MS_AC
+    ld [wCur + E_NOHIT], a       ; one hit per swing
+    ld b, 5                      ; monsters dodge 5%
+    call Chance
     jr c, .miss
-    ld b, 1
-    jr .dmg
-.crit:
-    ld a, 1
-    ld [wWasCrit], a
-    ld hl, MsgCrit
-    call SetMsg
-    ld b, 2                      ; crit: roll the damage dice twice
-.dmg:
-    call PlayerDamageRoll
-    push af
+    call PlayerMeleeDamage
+    push hl
     ld a, [wPlayerDir]
     add a, a
     ld e, a
@@ -1620,7 +1490,7 @@ UpdateCurEnemy:
     ld [wHitKX], a
     ld a, [hl]
     ld [wHitKY], a
-    pop af
+    pop hl
     jp ApplyDamageCur
 .miss:
     ld hl, MsgMiss
@@ -1812,20 +1682,13 @@ UpdatePickup:
     call SetMsg
     jp SfxPickup
 .heart:
-    ld a, [wMaxHP]
-    ld b, a
-    ld a, [wHP]
-    cp b
-    jr nc, .toPotion
-    add a, 4                     ; heart heals 4 HP
-    cp b
-    jr c, .ok
-    ld a, b
-.ok:
-    ld [wHP], a
+    call HpIsFull
+    jr z, .toPotion
+    ld a, 2                      ; heart heals 1/8 of max HP
+    call HpFraction
+    call HealPlayer
     ld hl, MsgHeal
-    call SetMsg
-    jp SfxPickup
+    jp SetMsg
 .toPotion:                       ; at full HP a heart becomes a potion
     ld a, ITEM_POTION
     call InvAdd
@@ -2239,67 +2102,6 @@ HideSpritesUnderWindow:
     ret
 
 ; ============================================================ HUD ==========
-; HP12/12  [][][][]  MSG.. L1
-BuildHUD:
-    ld hl, wHudBuf
-    ld bc, 20
-    xor a
-    call Memset
-    ld hl, wHudBuf
-    ld a, "H"
-    ld [hl+], a
-    ld a, "P"
-    ld [hl+], a
-    ld a, [wHP]
-    call Dec2
-    ld a, d
-    ld [hl+], a
-    ld a, e
-    ld [hl+], a
-    ld a, "/"
-    ld [hl+], a
-    ld a, [wMaxHP]
-    call Dec2
-    ld a, d
-    ld [hl+], a
-    ld a, e
-    ld [hl+], a
-    ld a, [wGold]                ; G999
-    ld e, a
-    ld a, [wGold + 1]
-    ld d, a
-    call Num16ToStr
-    ld a, "G"
-    ld [wHudBuf + 8], a
-    ld a, [wNumBuf + 1]
-    ld [wHudBuf + 9], a
-    ld a, [wNumBuf + 2]
-    ld [wHudBuf + 10], a
-    ld a, [wNumBuf + 3]
-    ld [wHudBuf + 11], a
-    ld a, [wMsgT]
-    and a
-    jr z, .lvl
-    ld a, [wMsgPtr]
-    ld l, a
-    ld a, [wMsgPtr + 1]
-    ld h, a
-    ld de, wHudBuf + 13
-    ld c, 5
-.msg:
-    ld a, [hl+]
-    ld [de], a
-    inc de
-    dec c
-    jr nz, .msg
-.lvl:
-    ld a, "L"
-    ld [wHudBuf + 18], a
-    ld a, [wLevel]
-    add a, T_DIGIT0
-    ld [wHudBuf + 19], a
-    ret
-
 ; a = 0..99 -> d = tens tile (blank if 0), e = ones tile
 Dec2:
     ld d, 0
@@ -2322,6 +2124,8 @@ Dec2:
 ; de = 0..9999 -> wNumBuf = 4 tiles (leading blanks), $FF
 Num16ToStr:
     ld hl, wNumBuf
+    ld bc, 10000
+    call .digit
     ld bc, 1000
     call .digit
     ld bc, 100
@@ -2334,7 +2138,7 @@ Num16ToStr:
     ld a, $FF
     ld [hl], a
     ld hl, wNumBuf
-    ld b, 3
+    ld b, 4
 .lz:
     ld a, [hl]
     cp T_DIGIT0
@@ -2654,7 +2458,7 @@ UpdateMenu:
 MenuHandlers:
     dw MenuPause, MenuStatus, MenuItems, MenuItemSub, MenuBoxMsg
     dw MenuOptions, MenuSkills, MenuBeast, MenuBeastPage, MenuIntro, MenuMap
-    dw MenuClass, MenuShop, MenuShopList, MenuInn, MenuDialog, MenuQuests, MenuSaveAsk
+    dw MenuClass, MenuShop, MenuShopList, MenuInn, MenuDialog, MenuQuests, MenuSaveAsk, MenuAlloc
 
 EnterMenuState:
     ld a, STATE_MENU
@@ -2762,13 +2566,6 @@ Retire:
     jp StartTitle
 
 ; ---- status (character sheet) -------------------------------------------
-MenuStatus:
-    ldh a, [hNewKeys]
-    and PAD_A | PAD_B | PAD_START
-    ret z
-    call SfxMenu
-    jp ReturnToPause
-
 MenuBoxMsg:
     ldh a, [hNewKeys]
     and PAD_A | PAD_B
@@ -3635,6 +3432,7 @@ Copy1bpp:
     ret
 
 ; ============================================================ data =========
+INCLUDE "src/stats.asm"
 INCLUDE "src/classes.asm"
 INCLUDE "src/inventory.asm"
 INCLUDE "src/town.asm"
@@ -3684,18 +3482,18 @@ SECTION "Text", ROMX, BANK[1]
 
 TitleList:
     TXT 3, 3, StrTitle
-    TXT 3, 5, StrTagline
+    TXT 4, 5, StrTagline
     TXT 2, 11, StrGoal1
     TXT 3, 12, StrGoal2
     TXT 4, 14, StrPress
     TXT 3, 16, StrCredit
     db $FF
-StrTitle:    db "DUNGEON QUEST", $FF
-StrTagline:  db "A 5E ADVENTURE", $FF
+StrTitle:    db "ARPG GB QUEST", $FF
+StrTagline:  db "VERSION 0.4.0", $FF
 StrGoal1:    db "FIVE LANDS. FOUR", $FF
 StrGoal2:    db "SEALS. ONE OGRE.", $FF
 StrPress:    db "PRESS START", $FF
-StrCredit:   db "RULES: SRD 5.1", $FF
+StrCredit:   db "BUILD 20261126", $FF
 
 IntroList:
     TXT 2, 2, Intro1
@@ -3890,10 +3688,41 @@ wAttack:       db
 wKnockX:       db
 wKnockY:       db
 wKnockT:       db
-wHP:           db
-wMaxHP:        db
-wLevel:        db
+wLevel:        dw               ; --- saved block: progression ---
 wXP:           dw
+wAttr:
+wStr:          dw
+wDex:          dw
+wVit:          dw
+wInt:          dw
+wFth:          dw
+wLck:          dw
+wStatPts:      dw
+wHP:           dw
+wMaxHP:        dw
+wMP:           dw
+wMaxMP:        dw               ; --- end saved block ---
+wATK:          dw
+wMAG:          dw
+wDEF:          dw
+wCrit:         db
+wCrit8:        db
+wDodgeP:       db
+wBlockP:       db
+wAtkTime:      db
+wMPRegenT:     db
+wWpnBase:      db
+wArmBase:      db
+wTplDef:       db
+wTplHp:        db
+wTplAtk:       db
+wTplXp:        db
+wMHP:          dw
+wMATK:         dw
+wMDEF:         dw
+wMXP:          dw
+wTmpW:         dw
+wAllocCur:     db
 wSecondWind:   db
 wClass:        db
 wSTR:          db
