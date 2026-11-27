@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>ARPG GB Quest</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Cpath d=%27M2 1h12v7c0 4-3 6-6 7-3-1-6-3-6-7z%27 fill=%27%23c9a24a%27/%3E%3Cpath d=%27M8 3v9M5 6h6%27 stroke=%27%2307060a%27 stroke-width=%271.6%27/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="embers" aria-hidden="true"></canvas>
+  <main id="stage">
+    <header class="crest">
+      <div class="rule"><span></span><i></i><span></span></div>
+      <h1>ARPG GB QUEST</h1>
+      <p class="sub">Five lands. Four seals. One ogre.</p>
+    </header>
+
+    <div id="frame">
+      <svg class="corner tl" viewBox="0 0 40 40" aria-hidden="true"><path d="M2 38V14L14 2h24M8 38V17L17 8h21M2 2l8 8" /><circle cx="6" cy="6" r="2.4" /></svg>
+      <svg class="corner tr" viewBox="0 0 40 40" aria-hidden="true"><path d="M2 38V14L14 2h24M8 38V17L17 8h21M2 2l8 8" /><circle cx="6" cy="6" r="2.4" /></svg>
+      <svg class="corner bl" viewBox="0 0 40 40" aria-hidden="true"><path d="M2 38V14L14 2h24M8 38V17L17 8h21M2 2l8 8" /><circle cx="6" cy="6" r="2.4" /></svg>
+      <svg class="corner br" viewBox="0 0 40 40" aria-hidden="true"><path d="M2 38V14L14 2h24M8 38V17L17 8h21M2 2l8 8" /><circle cx="6" cy="6" r="2.4" /></svg>
+      <div id="screen">
+        <canvas id="lcd" width="160" height="144"></canvas>
+        <button id="begin" type="button">
+          <span class="sigil" aria-hidden="true">&#x2726;</span>
+          <span class="go">Press any key to begin</span>
+          <span class="hint">or click</span>
+        </button>
+      </div>
+    </div>
+
+    <section id="keys" aria-label="Controls">
+      <div><kbd>&larr;</kbd><kbd>&uarr;</kbd><kbd>&darr;</kbd><kbd>&rarr;</kbd> / <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>Move</span></div>
+      <div><kbd>X</kbd> / <kbd>J</kbd><span>A &middot; Attack, talk, confirm</span></div>
+      <div><kbd>Z</kbd> / <kbd>K</kbd><span>B &middot; Class skill, back</span></div>
+      <div><kbd>Enter</kbd><span>Start &middot; Menu</span></div>
+      <div><kbd>Shift</kbd><span>Select</span></div>
+      <div><kbd>M</kbd><span id="muteLabel">Sound on</span><kbd>F</kbd><span>Full screen</span></div>
+    </section>
+    <p class="note">Gamepads work too. Your five save slots are kept in this browser.</p>
+  </main>
+
+  <div id="pad" aria-hidden="true">
+    <div id="dpad"><b class="u"></b><b class="d"></b><b class="l"></b><b class="r"></b></div>
+    <div id="sys"><div data-btn="select">Select</div><div data-btn="start">Start</div></div>
+    <div id="ab"><div data-btn="b">B</div><div data-btn="a">A</div></div>
+  </div>
+
+  <script src="binjgb.js"></script>
+  <script src="player.js"></script>
+</body>
+</html>

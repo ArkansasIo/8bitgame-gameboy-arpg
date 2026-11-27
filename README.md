@@ -1,6 +1,6 @@
 # ARPG GB QUEST: an action RPG for Game Boy Color
 
-**Version 0.7.0, build 20261126**
+**Version 0.8.0, build 20261127**
 
 A top-down action RPG written in SM83 assembly. It runs on a Game Boy Color, GBA or GBA SP
 in full color, and on an original Game Boy in grayscale. The game uses a 64 KB MBC5
@@ -55,6 +55,20 @@ The generators (`gen_gfx.py`, `gen_world.py`, `gen_data.py`) rebuild the `.inc` 
 automatically when you change them. Play `arpg_gb_quest.gb` in mGBA, SameBoy, BGB or
 Emulicious, or on a flash cart.
 
+## Play in a browser (OpenGame)
+```
+make web        # builds dist/: the ROM plus a web player (binjgb, MIT)
+```
+`dist/` is a static site with `index.html` at its root. The player runs the ROM in the binjgb emulator,
+keeps the 5 battery save slots in the browser, and takes keyboard (arrows/WASD, X/J = A, Z/K = B,
+Enter = Start, Shift = Select, M = mute, F = full screen), gamepads and touch. `opengame.json` points
+OpenGame at `dist/`. Licenses for the bundled emulator are in `web/LICENSES.txt`.
+
+## Art direction (v0.8.0)
+A dark-fantasy pass: ash-and-ember zone palettes, gold-on-black menus, a horned knight with heavy
+pauldrons, a horned ogre, torch-lit stone and braziers in Oakhollow, and an ember-lit crypt. All art is
+original and still drawn as ASCII pixel art in `gen_gfx.py`.
+
 ## Files
 ```
 game.asm         engine: boot, banks, rendering, window menus, rooms, player, enemies, HUD, sound
@@ -71,6 +85,8 @@ gen_world.py     world graph, generated rooms, spawns, monster stats, bestiary -
 gen_items.py     gear bases, affixes, powers, sets, uniques -> items.inc, ITEMS.md
 gen_data.py      items, classes, skills, shop stock -> data.inc
 tests/           PyBoy scripts that play through each system
+web/             browser player (index.html, style.css, player.js, vendored binjgb)
+opengame.json    OpenGame manifest (deploys dist/)
 ```
 
 ## How it works

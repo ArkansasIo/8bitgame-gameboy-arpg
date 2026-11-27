@@ -1,0 +1,16 @@
+{
+  "$schema": "https://opengame.io/schema/opengame.json",
+  "title": "ARPG GB Quest",
+  "tagline": "auto",
+  "description": "A dark-fantasy action RPG for the Game Boy Color. Pick from 9 races and 18 classes, break four seals across five cursed lands, chase Diablo-style loot and end the ogre in the Old Crypt.",
+  "genre": "auto",
+  "kind": "game",
+  "build": {
+    "output": "dist"
+  },
+  "controls": [
+    "keyboard",
+    "gamepad"
+  ],
+  "players": "single"
+}

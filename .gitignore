@@ -4,3 +4,5 @@ game.map
 shots/
 __pycache__/
 *.ram
+dist/
+.opengame/

@@ -1,5 +1,5 @@
 ; ============================================================================
-;  ARPG GB QUEST v0.7.0 (build 20261126) - action RPG for Game Boy Color
+;  ARPG GB QUEST v0.8.0 (build 20261127) - action RPG for Game Boy Color
 ;  Assembler: RGBDS 0.9+   (rgbasm / rgblink / rgbfix)
 ;
 ;  * GBC-enhanced: full color on Game Boy Color / GBA / GBA SP,
@@ -3690,11 +3690,11 @@ TitleList:
     TXT 3, 16, StrCredit
     db $FF
 StrTitle:    db "ARPG GB QUEST", $FF
-StrTagline:  db "VERSION 0.7.0", $FF
+StrTagline:  db "VERSION 0.8.0", $FF
 StrGoal1:    db "FIVE LANDS. FOUR", $FF
 StrGoal2:    db "SEALS. ONE OGRE.", $FF
 StrPress:    db "PRESS START", $FF
-StrCredit:   db "BUILD 20261126", $FF
+StrCredit:   db "BUILD 20261127", $FF
 
 IntroList:
     TXT 2, 2, Intro1
